@@ -1,0 +1,37 @@
+# Binary
+bin/
+/pcb
+san_*
+*.tar.gz
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Dependencies
+vendor/
+
+# Coverage
+coverage.out
+
+# Local config
+.pcb/*
+!.pcb/skills/
+!.pcb/personas/
+.claude/
+.mcp.json
+CLAUDE.md
+CLAUDE.local.md
+.autodev/
+/layercheck
+# Added by code-review-graph
+.code-review-graph/

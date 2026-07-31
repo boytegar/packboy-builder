@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docs — Packboy Builder</title>
+<meta name="description" content="Packboy Builder documentation: getting started, guides, concepts, reference, and architecture.">
+<meta property="og:title" content="Docs — Packboy Builder">
+<meta property="og:description" content="Getting started, guides, concepts, reference, and architecture for Packboy Builder.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://boytegar.github.io/packboy-builder/docs.html">
+<meta property="og:image" content="https://boytegar.github.io/packboy-builder/pcb.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' font-family='monospace'>%E2%9C%A6</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav id="nav">
+  <div class="wrap">
+    <span class="logo"><a href="index.html">&lt; SAN <span class="spark">✦</span> /&gt;</a></span>
+    <button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" onclick="toggleNav(this)">≡</button>
+    <div class="nav-links" id="nav-links">
+      <a href="index.html#why">Why</a>
+      <a href="index.html#benchmark">Benchmark</a>
+      <a href="index.html#community">Community</a>
+      <span class="nav-sep" aria-hidden="true"></span>
+      <a href="intro.html">Intro</a>
+      <a href="getting-started.html">Start</a>
+      <a href="docs.html">Docs</a>
+      <span class="lang-switch">
+        <button class="lang-btn" id="lang-btn" aria-haspopup="listbox" aria-expanded="false">
+          <span id="lang-label"></span>
+          <svg class="lang-arrow" width="8" height="6" viewBox="0 0 8 6"><path d="M0 0l4 6 4-6" fill="currentColor"/></svg>
+        </button>
+        <div class="lang-menu" id="lang-menu" role="listbox"></div>
+      </span>
+      <a class="nav-cta" href="https://github.com/boytegar/packboy-builder">★ GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="page-hero">
+  <div class="wrap">
+    <h1>Documentation</h1>
+    <p>Everything from your first prompt to the internals.</p>
+  </div>
+</header>
+
+<section style="padding-top: 24px;">
+  <div class="wrap">
+    <div class="grid">
+
+      <div class="card doc-card">
+        <h3>Start here</h3>
+        <ul>
+          <li><a href="getting-started.html">Getting Started</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/architecture.md">Architecture overview</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/operations/development.md">Local development</a></li>
+        </ul>
+      </div>
+
+      <div class="card doc-card">
+        <h3>Guides</h3>
+        <ul>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/guides/writing-a-skill.md">Writing a skill</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/guides/writing-a-subagent.md">Writing a subagent</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/guides/writing-a-plugin.md">Writing a plugin</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/guides/explore-mode.md">Explore mode</a></li>
+        </ul>
+      </div>
+
+      <div class="card doc-card">
+        <h3>Concepts</h3>
+        <ul>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/concepts/persona.md">Personas</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/concepts/harness-channels.md">Harness channels &amp; identity</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/concepts/permission-model.md">Permission model</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/concepts/extension-model.md">Extension model</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/concepts/data-flow.md">Data flow</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/concepts/compaction.md">Context compaction</a></li>
+        </ul>
+      </div>
+
+      <div class="card doc-card">
+        <h3>Reference</h3>
+        <ul>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/reference/slash-commands.md">Slash commands</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/reference/configuration.md">Configuration</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/reference/package-map.md">Package map</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/reference/token-limits.md">Token limits</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/reference/cost-tracking.md">Cost tracking</a></li>
+        </ul>
+      </div>
+
+      <div class="card doc-card">
+        <h3>Architecture &amp; packages</h3>
+        <ul>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/architecture.md">Architecture</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/packages/index.md">Package index</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/reference/dependency-rules.md">Dependency rules</a></li>
+        </ul>
+      </div>
+
+      <div class="card doc-card">
+        <h3>Operations</h3>
+        <ul>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/operations/testing.md">Testing</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/operations/benchmark.md">Benchmark</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/operations/release.md">Release</a></li>
+          <li><a href="https://github.com/boytegar/packboy-builder/blob/main/docs/operations/troubleshooting.md">Troubleshooting</a></li>
+        </ul>
+      </div>
+
+    </div>
+
+    <div class="cta-box" style="margin-top: 48px;">
+      <h2>Looking for the full tree?</h2>
+      <p>Browse every document, including per-package design pages, on GitHub.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/boytegar/packboy-builder/tree/main/docs">Browse all docs</a>
+        <a class="btn btn-ghost" href="index.html">Back to home</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© <span id="year"></span> Packboy Builder · Apache 2.0</span>
+    <span>
+      <a href="https://github.com/boytegar/packboy-builder">GitHub</a> ·
+      <a href="docs.html">Docs</a> ·
+      <a href="https://github.com/boytegar/packboy-builder/blob/main/CONTRIBUTING.md">Contributing</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('year').innerText = new Date().getFullYear();
+
+  function toggleNav(btn) {
+    const nav = document.getElementById('nav');
+    const open = nav.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open);
+  }
+  document.querySelectorAll('#nav-links a').forEach(a =>
+    a.addEventListener('click', () => document.getElementById('nav').classList.remove('open')));
+  const nav = document.getElementById('nav');
+  const onScroll = () => nav.classList.toggle('scrolled', window.scrollY > 8);
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
+  // Language switcher — custom dropdown
+  (function() {
+    const LANGS = { en: { label: 'EN', ext: '.html' }, zh: { label: '中文', ext: '.zh.html' } };
+    const PAGES = new Set(['index', 'getting-started', 'docs']);
+    const page = location.pathname.split('/').pop() || 'index.html';
+    const base = PAGES.has(page.replace(/\.[a-z]{2}\.html$/, '').replace(/\.html$/, ''))
+      ? page.replace(/\.[a-z]{2}\.html$/, '').replace(/\.html$/, '') : 'index';
+    const m = page.match(/\.([a-z]{2})\.html$/);
+    const cur = m ? m[1] : 'en';
+    const label = document.getElementById('lang-label');
+    const menu = document.getElementById('lang-menu');
+    const btn = document.getElementById('lang-btn');
+    if (!label || !menu || !btn) return;
+    label.textContent = LANGS[cur].label;
+    Object.entries(LANGS).forEach(([code, lang]) => {
+      const opt = document.createElement('button');
+      opt.textContent = lang.label;
+      opt.dataset.code = code;
+      if (code === cur) opt.classList.add('active');
+      opt.addEventListener('click', function () { location.href = base + LANGS[this.dataset.code].ext; });
+      menu.appendChild(opt);
+    });
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const open = this.getAttribute('aria-expanded') === 'true';
+      this.setAttribute('aria-expanded', !open);
+      menu.classList.toggle('open');
+    });
+    document.addEventListener('click', function () {
+      menu.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    });
+  })();
+</script>
+</body>
+</html>

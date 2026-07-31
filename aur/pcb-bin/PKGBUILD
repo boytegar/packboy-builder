@@ -1,0 +1,23 @@
+# Maintainer: Your Name <your@email.com>
+pkgname=pcb-bin
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="A fast, open agent harness for the terminal — single Go binary, ~12MB, zero runtime deps"
+arch=('x86_64' 'aarch64')
+url="https://github.com/boytegar/packboy-builder"
+license=('Apache-2.0')
+provides=('pcb')
+conflicts=('pcb')
+depends=('glibc')
+optdepends=(
+    'git: for git-based workflows'
+)
+source_x86_64=("$url/releases/download/v$pkgver/packboy-builder_linux_amd64.tar.gz")
+source_aarch64=("$url/releases/download/v$pkgver/packboy-builder_linux_arm64.tar.gz")
+sha256sums_x86_64=('REPLACE_WITH_X86_64_SHA256')
+sha256sums_aarch64=('REPLACE_WITH_ARM64_SHA256')
+
+package() {
+    install -Dm755 pcb "$pkgdir/usr/bin/pcb"
+    install -Dm644 <(echo "$pkgdesc") "$pkgdir/usr/share/doc/$pkgname/README"
+}

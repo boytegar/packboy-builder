@@ -1,0 +1,43 @@
+package setting
+
+import "testing"
+
+func TestWithDefaultDisabledToolsOverlay(t *testing.T) {
+	// Absent key falls back to the factory default.
+	got := WithDefaultDisabledTools(nil)
+	if !got["Cron"] {
+		t.Fatal("Cron should be disabled by default")
+	}
+
+	// An explicit false entry (the /tool panel's enable) overrides the default.
+	got = WithDefaultDisabledTools(map[string]bool{"Cron": false})
+	if got["Cron"] {
+		t.Fatal("explicit enable must override the factory default")
+	}
+
+	// Explicit disables of normal tools pass through.
+	got = WithDefaultDisabledTools(map[string]bool{"WebSearch": true})
+	if !got["WebSearch"] || !got["Cron"] {
+		t.Fatalf("unexpected map: %#v", got)
+	}
+
+	// The task tracker tools ship disabled by default, and re-enabling one from
+	// the /tool panel (an explicit false) overrides that.
+	got = WithDefaultDisabledTools(nil)
+	for _, name := range []string{"TaskCreate", "TaskGet", "TaskUpdate"} {
+		if !got[name] {
+			t.Fatalf("%s should be disabled by default", name)
+		}
+	}
+	got = WithDefaultDisabledTools(map[string]bool{"TaskCreate": false})
+	if got["TaskCreate"] {
+		t.Fatal("explicit enable must override the task-tracker default")
+	}
+
+	// Inter-agent controls ship disabled by default.
+	for _, name := range []string{"SendMessage", "AgentStop"} {
+		if !WithDefaultDisabledTools(nil)[name] {
+			t.Fatalf("%s should be disabled by default", name)
+		}
+	}
+}

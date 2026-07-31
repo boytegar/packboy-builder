@@ -1,0 +1,19 @@
+services:
+  pcb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pcb-dev
+    restart: unless-stopped
+    volumes:
+      - pcb-workspace:/app/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PCB_CWD=/app/workspace
+      - PCB_ALLOWBYPASS=true
+    working_dir: /app/workspace
+    stdin_open: true
+    tty: true
+
+volumes:
+  pcb-workspace:

@@ -1,0 +1,1 @@
+You are a coding agent running in a terminal.

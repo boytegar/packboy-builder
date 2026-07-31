@@ -1,0 +1,147 @@
+#!/bin/bash
+set -euo pipefail
+
+REPO="boytegar/packboy-builder"
+BINARY="pcb"
+INSTALL_DIR="${HOME}/.local/bin"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+info() { echo -e "${GREEN}$1${NC}"; }
+warn() { echo -e "${YELLOW}$1${NC}"; }
+error() { echo -e "${RED}$1${NC}" >&2; exit 1; }
+
+usage() {
+    echo "Usage: $0 [install|upgrade|uninstall]"
+    echo ""
+    echo "Commands:"
+    echo "  install    Install pcb (default)"
+    echo "  upgrade    Upgrade to latest version"
+    echo "  uninstall  Remove pcb and config"
+    exit 0
+}
+
+normalize_version() {
+    local version="$1"
+    version="${version#v}"
+    echo "$version"
+}
+
+# Detect OS and architecture
+detect_platform() {
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m)
+
+    case "$ARCH" in
+        x86_64|amd64) ARCH="amd64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
+        *) error "Unsupported architecture: $ARCH" ;;
+    esac
+
+    case "$OS" in
+        darwin|linux) ;;
+        *) error "Unsupported OS: $OS" ;;
+    esac
+}
+
+get_latest_version() {
+    curl -fsSI "https://github.com/${REPO}/releases/latest" | grep -i "^location:" | sed -E 's/.*\/tag\/v([^/]*).*/\1/' | tr -d '\r'
+}
+
+get_download_url() {
+    local version="$1"
+    echo "https://github.com/${REPO}/releases/download/v${version}/packboy-builder_${OS}_${ARCH}.tar.gz"
+}
+
+do_install() {
+    detect_platform
+    
+    info "Fetching latest version..."
+    VERSION=$(get_latest_version)
+    [ -z "$VERSION" ] && error "Failed to get latest version"
+
+    # Check if already installed
+    if command -v "$BINARY" &>/dev/null; then
+        CURRENT=$("$BINARY" version 2>/dev/null | awk '{print $3}' || echo "unknown")
+        CURRENT="$(normalize_version "$CURRENT")"
+        if [ "$CURRENT" = "$VERSION" ]; then
+            info "✓ pcb v${VERSION} is already installed"
+            return
+        fi
+        info "Upgrading pcb from v${CURRENT} to v${VERSION}..."
+    else
+        info "Installing pcb v${VERSION} for ${OS}/${ARCH}..."
+    fi
+
+    # Download and extract
+    DOWNLOAD_URL="$(get_download_url "$VERSION")"
+    [ -z "$DOWNLOAD_URL" ] && error "Release asset packboy-builder_${OS}_${ARCH}.tar.gz not found for v${VERSION}"
+    TMP_DIR=$(mktemp -d)
+    trap "rm -rf $TMP_DIR" EXIT
+
+    curl -fL --progress-bar "$DOWNLOAD_URL" -o "$TMP_DIR/pcb.tar.gz" || error "Download failed"
+    if ! tar -tzf "$TMP_DIR/pcb.tar.gz" >/dev/null 2>&1; then
+        error "Downloaded asset is not a valid tar.gz archive"
+    fi
+    tar -xzf "$TMP_DIR/pcb.tar.gz" -C "$TMP_DIR" || error "Extract failed"
+
+    # Install
+    mkdir -p "$INSTALL_DIR"
+    # Show warning first
+    EXISTING_BIN=$(command -v "$BINARY" || true)
+    if [ -n "$EXISTING_BIN" ] && [ "$EXISTING_BIN" != "$INSTALL_DIR/$BINARY" ]; then
+        warn "Found existing installation at $EXISTING_BIN."
+        warn "This script will install to $INSTALL_DIR/$BINARY instead."
+    fi
+    mv "$TMP_DIR/$BINARY" "$INSTALL_DIR/"
+    chmod +x "$INSTALL_DIR/$BINARY"
+
+    # Hint if not in PATH
+    if ! echo "$PATH" | tr ':' '\n' | grep -qxF "$INSTALL_DIR"; then
+        warn "Add $INSTALL_DIR to your PATH:"
+        warn "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+
+    info "✓ pcb v${VERSION} installed to $INSTALL_DIR/$BINARY"
+}
+
+do_uninstall() {
+    info "Uninstalling pcb..."
+
+    # Remove binary
+    if [ -f "$INSTALL_DIR/$BINARY" ]; then
+        echo -n "Remove binary "$INSTALL_DIR/$BINARY" [y/N] "
+        read -r response < /dev/tty
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            rm "$INSTALL_DIR/$BINARY"
+            info "✓ Removed $INSTALL_DIR/$BINARY"
+        fi
+    else
+        warn "Binary not found at $INSTALL_DIR/$BINARY"
+    fi
+
+    # Ask about config (~/.pcb)
+    cfg="$HOME/.pcb"
+    if [ -d "$cfg" ]; then
+        echo -n "Remove config directory ${cfg}? [y/N] "
+        read -r response < /dev/tty
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            rm -rf "$cfg"
+            info "✓ Removed config directory ${cfg}"
+        fi
+    fi
+
+    info "✓ Uninstall complete"
+}
+
+# Main
+case "${1:-install}" in
+    install|upgrade) do_install ;;
+    uninstall|remove) do_uninstall ;;
+    -h|--help|help) usage ;;
+    *) error "Unknown command: $1" ;;
+esac

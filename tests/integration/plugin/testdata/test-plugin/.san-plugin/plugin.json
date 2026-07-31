@@ -1,0 +1,13 @@
+{
+  "name": "test-plugin",
+  "version": "1.0.0",
+  "description": "A test plugin for UI/UX comparison testing between Claude Code and Packboy Builder",
+  "author": {
+    "name": "Packboy Builder Test",
+    "email": "test@pcb.dev"
+  },
+  "homepage": "https://github.com/genai-io/pcb",
+  "repository": "https://github.com/genai-io/pcb",
+  "license": "MIT",
+  "keywords": ["test", "comparison", "plugin"]
+}
