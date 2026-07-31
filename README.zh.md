@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>&lt; SAN ✦ /&gt;</h1>
+  <h1>&lt; Packboy ✦ /&gt;</h1>
   <p><strong>开销最小，Agent 最强。</strong></p>
   <p>上下文精简，原生性能，从里到外都开放。</p>
   <p>

@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>&lt; SAN ✦ /&gt;</h1>
+  <h1>&lt; Packboy ✦ /&gt;</h1>
   <p><strong>Minimal overhead. Maximum agent.</strong></p>
   <p>Small context, native speed, open all the way down.</p>
   <p>
