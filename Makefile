@@ -13,7 +13,7 @@ export CGO_ENABLED := 0
 GOFILES := $(shell find . -path './vendor' -prune -o -path './.git' -prune -o -name '*.go' -print)
 GOIMPORTS_VERSION := v0.43.0
 
-.PHONY: build build-all install clean release release-push test cover format format-check lint install-format-tools check-format-tools
+.PHONY: build build-all install clean release release-push aur-update aur-push test cover format format-check lint install-format-tools check-format-tools
 
 build: format
 	@mkdir -p $(BINDIR)
@@ -124,3 +124,20 @@ release-push:
 	git rev-parse --verify "$$tag" >/dev/null 2>&1 && { echo "tag $$tag already exists"; exit 1; }; \
 	grep -q "^## \[$$tag\]" CHANGELOG.md || { echo "CHANGELOG.md is missing section $$tag"; exit 1; }; \
 	git push origin main && git tag "$$tag" && git push origin "$$tag"
+
+# Refresh aur/pcb-bin from a published GitHub release (checksums + .SRCINFO).
+# Pass an explicit release tag; do not rely on git-describe defaults.
+# Example: make aur-update VERSION=v1.22.1
+aur-update:
+	@echo "$(VERSION)" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$$' || { \
+		echo "VERSION is required, e.g. make aur-update VERSION=v1.22.1"; exit 1; }
+	@./aur/update.sh "$(VERSION)"
+
+# Update local AUR files and push to aur.archlinux.org.
+# Requires SSH key registered on AUR (AUR_SSH_KEY, default ~/.ssh/id_ed25519_aur).
+# Example: make aur-push VERSION=v1.22.1
+# Optional: AUR_PKGREL=2 make aur-push VERSION=v1.22.1
+aur-push:
+	@echo "$(VERSION)" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$$' || { \
+		echo "VERSION is required, e.g. make aur-push VERSION=v1.22.1"; exit 1; }
+	@./aur/update.sh "$(VERSION)" --push

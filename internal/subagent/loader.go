@@ -94,7 +94,7 @@ func loadAgentsFromDirWithNamespace(path string, namespace string) {
 		return
 	}
 
-	// Path is a directory, scan for .md files
+	// Path is a directory, scan for subfolders with AGENT.md
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return
@@ -102,9 +102,15 @@ func loadAgentsFromDirWithNamespace(path string, namespace string) {
 
 	for _, entry := range entries {
 		if entry.IsDir() {
+			// Check for AGENT.md inside subfolder
+			agentFile := filepath.Join(path, entry.Name(), "AGENT.md")
+			if _, err := os.Stat(agentFile); err == nil {
+				loadAgentFromFileWithNamespace(agentFile, namespace)
+			}
 			continue
 		}
 
+		// Also support flat .md files for backward compat
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".md") {
 			continue

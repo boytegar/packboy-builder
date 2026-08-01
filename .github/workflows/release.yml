@@ -52,7 +52,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: |
-            bin/san_*.tar.gz
-            bin/san_*.zip
+            bin/packboy-builder_*.tar.gz
+            bin/packboy-builder_*.zip
             CHANGELOG.md
           body_path: release-notes.md

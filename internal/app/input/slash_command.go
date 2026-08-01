@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/app/conv"
 	"github.com/boytegar/packboy-builder/internal/app/kit"
 	"github.com/boytegar/packboy-builder/internal/command"
+	"github.com/boytegar/packboy-builder/internal/confdir"
 	"github.com/boytegar/packboy-builder/internal/core"
 	"github.com/boytegar/packboy-builder/internal/cron"
 	"github.com/boytegar/packboy-builder/internal/llm"
@@ -130,6 +132,7 @@ func builtinCommandHandlers() map[string]slashCommandHandler {
 		"name":           (*SlashCommandController).handleNameCommand,
 		"evolve":         (*SlashCommandController).handleEvolveCommand,
 		"selflearn-demo": (*SlashCommandController).handleSelflearnDemoCommand,
+		"add":            (*SlashCommandController).handleAddCommand,
 	}
 }
 
@@ -550,6 +553,172 @@ func (c *SlashCommandController) handleAgentCommand(_ context.Context, _ string)
 		return "", nil, err
 	}
 	return "", nil, nil
+}
+
+func (c *SlashCommandController) handleAddCommand(_ context.Context, args string) (string, tea.Cmd, error) {
+	parts := strings.Fields(args)
+	if len(parts) < 2 {
+		return "Usage: /add <persona|skill|agent> <name> [description]", nil, nil
+	}
+	
+	typ := strings.ToLower(parts[0])
+	name := parts[1]
+	desc := ""
+	if len(parts) > 2 {
+		desc = strings.Join(parts[2:], " ")
+	}
+	
+	// Build prompt for agent
+	var prompt string
+	switch typ {
+	case "persona":
+		prompt = buildPersonaPrompt(name, desc)
+	case "skill":
+		prompt = buildSkillPrompt(name, desc)
+	case "agent":
+		prompt = buildAgentPrompt(name, desc)
+	default:
+		return "Unknown type. Use: persona, skill, or agent", nil, nil
+	}
+	
+	// Submit to agent for generation
+	return "", c.env.SubmitToAgent(prompt, nil), nil
+}
+
+func buildPersonaPrompt(name, desc string) string {
+	if desc == "" {
+		desc = name + " persona"
+	}
+	return fmt.Sprintf(`Create a new persona "%s" in .pcb/personas/%s/ with this structure:
+
+1. system/identity.md - Define the core role and expertise for "%s"
+2. system/behavior.md - Core behavior patterns and principles
+3. system/rules.md - Hard rules and constraints
+4. settings.json - {"description": "%s", "skills": {}}
+5. README.md - Overview with structure explanation
+
+Make it detailed and useful. Use the software-engineer persona in .san/personas/ as a reference for quality and structure.`, name, name, name, desc)
+}
+
+func buildSkillPrompt(name, desc string) string {
+	if desc == "" {
+		desc = name + " skill"
+	}
+	return fmt.Sprintf(`Create a new skill "%s" in .pcb/skills/%s/SKILL.md with:
+
+---
+name: %s
+description: %s
+---
+
+# %s
+
+Write detailed, actionable instructions for this skill. Include examples, usage patterns, and clear guidelines.`, name, name, name, desc, name)
+}
+
+func buildAgentPrompt(name, desc string) string {
+	if desc == "" {
+		desc = name + " agent"
+	}
+	return fmt.Sprintf(`Create a new agent "%s" in .pcb/agents/%s/AGENT.md with:
+
+---
+name: %s
+description: %s
+model: inherit
+max_steps: 10
+---
+
+# %s
+
+Define the agent's purpose, capabilities, and behavior. Include what tools it should use and what tasks it handles.`, name, name, name, desc, name)
+}
+
+func (c *SlashCommandController) createPersona(name string) (string, tea.Cmd, error) {
+	base := filepath.Join(confdir.Dir(c.env.Cwd), "personas", name)
+	if err := os.MkdirAll(filepath.Join(base, "system"), 0755); err != nil {
+		return "Failed to create persona: " + err.Error(), nil, nil
+	}
+	if err := os.MkdirAll(filepath.Join(base, "skills"), 0755); err != nil {
+		return "Failed to create persona: " + err.Error(), nil, nil
+	}
+	
+	settings := filepath.Join(base, "settings.json")
+	if err := os.WriteFile(settings, []byte(`{
+  "description": "`+name+` persona",
+  "skills": {}
+}
+`), 0644); err != nil {
+		return "Failed to write settings: " + err.Error(), nil, nil
+	}
+	
+	identity := filepath.Join(base, "system", "identity.md")
+	if err := os.WriteFile(identity, []byte("You are "+name+".\n\nDefine your role, expertise, and what sets you apart here.\n"), 0644); err != nil {
+		return "Failed to write identity: " + err.Error(), nil, nil
+	}
+	
+	behavior := filepath.Join(base, "system", "behavior.md")
+	if err := os.WriteFile(behavior, []byte("## Core behaviors\n\n- Behavior rule 1\n- Behavior rule 2\n- Behavior rule 3\n"), 0644); err != nil {
+		return "Failed to write behavior: " + err.Error(), nil, nil
+	}
+	
+	rules := filepath.Join(base, "system", "rules.md")
+	if err := os.WriteFile(rules, []byte("## Rules\n\n- Rule 1\n- Rule 2\n"), 0644); err != nil {
+		return "Failed to write rules: " + err.Error(), nil, nil
+	}
+	
+	readme := filepath.Join(base, "README.md")
+	if err := os.WriteFile(readme, []byte("# "+name+"\n\n"+name+" persona\n\n## Structure\n\n- `system/identity.md` → core identity\n- `system/behavior.md` → behavior patterns\n- `system/rules.md` → hard rules\n- `skills/` → persona-scoped skills\n- `settings.json` → config overlay\n"), 0644); err != nil {
+		return "Failed to write README: " + err.Error(), nil, nil
+	}
+	
+	return "Created persona: " + base, nil, nil
+}
+
+func (c *SlashCommandController) createSkill(name string) (string, tea.Cmd, error) {
+	base := filepath.Join(confdir.Dir(c.env.Cwd), "skills", name)
+	if err := os.MkdirAll(base, 0755); err != nil {
+		return "Failed to create skill: " + err.Error(), nil, nil
+	}
+	
+	skillFile := filepath.Join(base, "SKILL.md")
+	if err := os.WriteFile(skillFile, []byte(`---
+name: `+name+`
+description: `+name+` skill description
+---
+
+# `+name+`
+
+Skill instructions go here.
+`), 0644); err != nil {
+		return "Failed to write SKILL.md: " + err.Error(), nil, nil
+	}
+	
+	return "Created skill: " + base, nil, nil
+}
+
+func (c *SlashCommandController) createAgent(name string) (string, tea.Cmd, error) {
+	base := filepath.Join(confdir.Dir(c.env.Cwd), "agents", name)
+	if err := os.MkdirAll(base, 0755); err != nil {
+		return "Failed to create agent: " + err.Error(), nil, nil
+	}
+	
+	agentFile := filepath.Join(base, "AGENT.md")
+	if err := os.WriteFile(agentFile, []byte(`---
+name: `+name+`
+description: `+name+` agent description
+model: inherit
+max_steps: 10
+---
+
+# `+name+`
+
+Agent instructions go here.
+`), 0644); err != nil {
+		return "Failed to write AGENT.md: " + err.Error(), nil, nil
+	}
+	
+	return "Created agent: " + base, nil, nil
 }
 
 func (c *SlashCommandController) handleThinkCommand(_ context.Context, args string) (string, tea.Cmd, error) {
