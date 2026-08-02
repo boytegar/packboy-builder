@@ -35,12 +35,12 @@ const (
 type providerItemKind int
 
 const (
-	providerItemProviderHeader providerItemKind = iota // non-selectable provider group header (Models tab)
-	providerItemModel                                  // selectable model row (Models tab)
-	providerItemProvider                               // provider row (Providers tab)
-	providerItemAuthMethod                             // expanded auth-method sub-row (Providers tab)
-	providerItemSubagent                               // selectable subagent row (Subagents tab phase 1)
-	providerItemSubagentDefault                        // selectable default-model row (Subagents tab phase 1)
+	providerItemProviderHeader  providerItemKind = iota // non-selectable provider group header (Models tab)
+	providerItemModel                                   // selectable model row (Models tab)
+	providerItemProvider                                // provider row (Providers tab)
+	providerItemAuthMethod                              // expanded auth-method sub-row (Providers tab)
+	providerItemSubagent                                // selectable subagent row (Subagents tab phase 1)
+	providerItemSubagentDefault                         // selectable default-model row (Subagents tab phase 1)
 )
 
 // providerListItem is a single row in the flattened visible-items list.

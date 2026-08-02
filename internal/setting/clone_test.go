@@ -9,13 +9,13 @@ import "testing"
 func TestClonePreservesAllScalarFields(t *testing.T) {
 	yes := true
 	src := &Data{
-		Model:          "claude-opus-4-7",
-		TokenLimit:     200000,
-		Theme:          "dark",
-		SearchProvider: "exa",
-		AllowBypass:    &yes,
-		Persona:        "ml-researcher",
-		SkillDirs:      []string{"/mnt/shared/skills", "~/team-skills"},
+		Model:                "claude-opus-4-7",
+		TokenLimit:           200000,
+		Theme:                "dark",
+		SearchProvider:       "exa",
+		AllowBypass:          &yes,
+		Persona:              "ml-researcher",
+		SkillDirs:            []string{"/mnt/shared/skills", "~/team-skills"},
 		SubagentDefaultModel: "haiku",
 		SelfLearn: SelfLearnSettings{
 			Memory:   SelfLearnMemory{Enabled: true, MaxKB: 15},
