@@ -2,10 +2,8 @@
 // window size (the deferred initial paint), where it commits any resumed
 // conversation. On later resizes the live tail re-renders at the new width on
 // the next frame, and already-committed scrollback is immutable to us — the
-// terminal rewraps it on its own. renderNormalView pads the view to fill the
-// full terminal height so the inline renderer's frame area stays constant
-// (= terminal size) across resizes, preventing ghost rows from the previous
-// frame layout.
+// terminal rewraps it on its own. The managed frame stays only as tall as the
+// live tail + footer so committed scrollback sits directly above the input.
 package app
 
 import (

@@ -87,11 +87,9 @@ func isDockedModal(ov overlayPanel) bool {
 // shown and earlier lines scroll off — the full message lands in native
 // scrollback at turn end, which the terminal scrolls back through natively.
 //
-// The view is padded to fill the full terminal height. This keeps the inline
-// renderer's frame area constant (= terminal size) across resizes. Without
-// padding, the frame area shrinks/grows as the textarea wraps differently at
-// different widths, and the renderer leaves ghost rows from the previous
-// (wider/narrower) frame visible underneath the new one.
+// The managed frame is only as tall as the live tail + footer. Padding it to
+// full terminal height would push native scrollback (committed thinking /
+// content) far above the input and leave a large blank band between them.
 func (m *model) renderNormalView(separator, trackerView string) (string, *tea.Cursor) {
 	// Render the footer first so we can measure how many lines it consumes
 	// and cap the chat section to the remaining terminal height.
@@ -103,20 +101,9 @@ func (m *model) renderNormalView(separator, trackerView string) (string, *tea.Cu
 	activeContent := conv.RenderActiveContent(m.messageRenderParams())
 	chatSection := tailLines(m.renderChatSection(activeContent, trackerView), maxContentHeight)
 
-	view := chatSection + footer
-	// Pad the top with blank lines so the view always fills the terminal
-	// height. This prevents the inline renderer's frame area from changing
-	// when the textarea wrapping changes on resize, which would leave ghost
-	// rows from the previous frame.
-	padding := m.env.Height - (strings.Count(view, "\n") + 1)
-	if padding > 0 {
-		view = strings.Repeat("\n", padding) + view
-		inputRow += padding
-	}
-
 	// The footer's row offsets are relative to its own first line; the chat
 	// section above it shifts them all down.
-	return view, m.inputCursor(strings.Count(chatSection, "\n") + inputRow + max(0, padding))
+	return chatSection + footer, m.inputCursor(strings.Count(chatSection, "\n") + inputRow)
 }
 
 // inputCursor returns where the terminal cursor belongs inside the composer.

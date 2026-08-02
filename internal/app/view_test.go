@@ -99,3 +99,26 @@ func TestTailLines(t *testing.T) {
 		})
 	}
 }
+
+// Full-height top padding pushed native scrollback (thinking/content) far above
+// the input and left a large blank band between them. The managed frame must
+// stay only as tall as live tail + footer.
+func TestRenderNormalViewDoesNotPadToTerminalHeight(t *testing.T) {
+	const width, height = 80, 40
+	m := &model{
+		env:       env{Width: width, Height: height, Ready: true},
+		conv:      conv.NewModel(width),
+		userInput: input.New("", width, nil, input.SelectorDeps{}),
+	}
+	m.userInput.Textarea.SetWidth(width - 4 - 2)
+
+	separator := strings.Repeat("─", width)
+	view, _ := m.renderNormalView(separator, "")
+	lines := strings.Count(view, "\n") + 1
+	if lines >= height {
+		t.Fatalf("managed frame is %d lines tall (terminal=%d); full-height padding reintroduced a blank gap above the input", lines, height)
+	}
+	if strings.HasPrefix(view, "\n") {
+		t.Fatalf("managed frame starts with a blank top pad: %q", view[:min(40, len(view))])
+	}
+}
