@@ -399,3 +399,34 @@ func TestRemoveImageToken(t *testing.T) {
 		t.Fatalf("unexpected cursor position after removal: %d", m.CursorIndex())
 	}
 }
+
+// The textarea pads every visible row to its content width with trailing
+// spaces. RenderTextarea must strip those per line so that wrapped rows (from
+// window resize or paste-induced wrapping) don't show extra whitespace.
+func TestRenderTextareaTrimsTrailingSpacesPerLine(t *testing.T) {
+	m := New("", 20, nil, SelectorDeps{})
+	// A value long enough to wrap at width 20.
+	m.Textarea.SetValue("aaaaaaaaaa bbbbbbbbbb cccc")
+
+	view := m.RenderTextarea()
+	for _, line := range strings.Split(view, "\n") {
+		if strings.TrimRight(line, " ") != line {
+			t.Fatalf("RenderTextarea left trailing spaces on line %q", line)
+		}
+	}
+}
+
+// Single-line paste should only trim the pasted text, not the user's existing
+// content — otherwise intentional leading spaces in the buffer get wiped.
+func TestPasteTrimsOnlyPastedPortion(t *testing.T) {
+	m := New("", 80, nil, SelectorDeps{})
+	m.Textarea.SetValue("  hello") // intentional leading indent
+	m.Textarea.CursorEnd()
+
+	// Simulate a paste that appends "  world  " (with surrounding spaces).
+	_, _ = m.HandleTextareaUpdate(tea.PasteMsg{Content: "  world  "})
+
+	if got := m.Textarea.Value(); !strings.Contains(got, "  hello") {
+		t.Fatalf("paste handling stripped the user's leading spaces; got %q", got)
+	}
+}

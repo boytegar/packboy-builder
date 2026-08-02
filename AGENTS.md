@@ -46,6 +46,25 @@ Before editing internal packages, read:
 
 Update those files when the rules change. Do not duplicate them here.
 
+## Subagent Usage
+
+**Research and exploration must use the `researcher` subagent** (mode=explore),
+not the main agent's own Read/Grep/Glob tools, when the task involves:
+
+- Reading or searching more than 1-2 files.
+- Tracing call paths, dependencies, or impact across the codebase.
+- Answering architecture or "where does X live" questions.
+- Gathering context before making changes.
+
+The main agent should call the `Agent` tool with `name="researcher"` and a
+self-contained `prompt` describing what to find. The subagent runs with its own
+isolated context and returns a concise summary with `file:line` references,
+keeping the main agent's context window clean.
+
+**Exception**: a single, direct Read/Grep/Glob call is fine when the exact file
+and target are already known (e.g. reading one function to edit it). When in
+doubt, delegate to the researcher subagent.
+
 ## Common Commands
 
 See `docs/operations/development.md` for build / test / lint / format

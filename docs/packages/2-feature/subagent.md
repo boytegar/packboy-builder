@@ -81,6 +81,9 @@ func ResetDefaultRegistry()           // test-only
 
 - `Registry` (`registry.go`) — `AgentConfig` map keyed by name, plus
   enable state stores (user + project).
+- `builtin.go` — built-in agent definitions (e.g. `researcher`) registered
+  automatically at load time. User/project agent files with the same name
+  override built-ins.
 - `Executor` (`executor.go`) — spawns a `core.Agent` for one subagent
   invocation, manages its lifecycle (workspace, permission gate, hooks,
   session persistence), and returns the aggregated result.

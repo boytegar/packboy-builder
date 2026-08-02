@@ -60,6 +60,9 @@ func ClearPluginAgentPaths() {
 // Registry.Register overwrites by name, so sources load lowest-priority
 // first — the highest-priority definition lands last and wins.
 func LoadAgents(cwd string) {
+	// Register built-in agents first so user/project files override them by name.
+	registerBuiltinAgents(defaultRegistry)
+
 	homeDir, _ := os.UserHomeDir()
 
 	priorityOrdered := []agentSearchPath{

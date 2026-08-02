@@ -12,11 +12,13 @@ and [`concepts/extension-model.md`](../concepts/extension-model.md).
 
 | Scope | Path |
 |---|---|
+| Built-in | shipped with the binary (e.g. `researcher`); no file needed |
 | Project | `<project>/.pcb/agents/<name>.md` |
 | User | `~/.pcb/agents/<name>.md` |
 | Claude-compat | `<project>/.claude/agents/<name>.md`, `~/.claude/agents/<name>.md` |
 
-Project overrides user overrides Claude-compat by `name`.
+Project overrides user overrides Claude-compat by `name`. User/project files
+also override built-in agents by name.
 
 ## Minimal Example
 

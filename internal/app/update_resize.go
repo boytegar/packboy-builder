@@ -1,8 +1,11 @@
 // Window resize handling. handleWindowResize runs the first time we get a
 // window size (the deferred initial paint), where it commits any resumed
-// conversation. On later width changes there is nothing to recompute: the live
-// tail re-renders at the new width on the next frame, and already-committed
-// scrollback is immutable to us — the terminal rewraps it on its own.
+// conversation. On later resizes the live tail re-renders at the new width on
+// the next frame, and already-committed scrollback is immutable to us — the
+// terminal rewraps it on its own. renderNormalView pads the view to fill the
+// full terminal height so the inline renderer's frame area stays constant
+// (= terminal size) across resizes, preventing ghost rows from the previous
+// frame layout.
 package app
 
 import (

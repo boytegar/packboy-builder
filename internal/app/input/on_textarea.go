@@ -439,10 +439,20 @@ func (m *Model) HandleTextareaUpdate(msg tea.Msg) (tea.Cmd, bool) {
 			m.Textarea.CursorEnd()
 			m.Textarea.InsertString(placeholder)
 		} else {
-			trimmed := strings.TrimSpace(newValue)
-			if trimmed != newValue {
-				m.Textarea.SetValue(trimmed)
-				m.Textarea.CursorEnd()
+			// Trim only the pasted portion, not the entire value — the user's
+			// existing text may have intentional leading or trailing spaces.
+			trimmedPaste := strings.TrimSpace(pastedText)
+			if trimmedPaste != pastedText {
+				if strings.HasPrefix(newValue, prevValue) {
+					// Paste was at the end: replace the trailing pasted text.
+					m.Textarea.SetValue(prevValue + trimmedPaste)
+					m.Textarea.CursorEnd()
+				} else {
+					// Paste was in the middle: reinsert the trimmed text at the
+					// cursor position by reconstructing around the paste site.
+					m.Textarea.SetValue(strings.Replace(newValue, pastedText, trimmedPaste, 1))
+					m.Textarea.CursorEnd()
+				}
 			}
 		}
 	}
