@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 - Add builtin `graph` skill for knowledge graph engineering (ontology, extraction, fusion, GraphRAG) and task graph orchestration (parallel fan-out, verifier separation, stop rule, human gates). Invoke via `/graph {prompt}` or activate in `/skills`.
 
+## [v1.22.2] - 2026-08-02
+
+### Added
+- Ship a built-in `researcher` subagent with the binary — read-only, explore mode, no `.pcb/agents/` file required. User/project agent files with the same name override it.
+- Add subagent usage rules to `AGENTS.md` steering the main agent to delegate research and exploration to the `researcher` subagent, keeping the main context window clean.
+
 ## [v1.22.1] - 2026-07-30
 
 ### Added
