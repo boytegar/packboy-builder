@@ -2,7 +2,7 @@ BINARY := pcb
 BINDIR := bin
 ASSET := packboy-builder
 SRCDIR := ./cmd/pcb
-VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+VERSION := $(shell git describe --tags --abbrev=0 --match='v*' 2>/dev/null || echo "dev")
 BUILDTIME := $(shell date -u +%Y-%m-%d)
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILDTIME) -X main.commit=$(COMMIT)"
@@ -127,17 +127,17 @@ release-push:
 
 # Refresh aur/pcb-bin from a published GitHub release (checksums + .SRCINFO).
 # Pass an explicit release tag; do not rely on git-describe defaults.
-# Example: make aur-update VERSION=v1.22.1
+# Example: make aur-update VERSION=v1.22.4
 aur-update:
 	@echo "$(VERSION)" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$$' || { \
-		echo "VERSION is required, e.g. make aur-update VERSION=v1.22.1"; exit 1; }
+		echo "VERSION is required, e.g. make aur-update VERSION=v1.22.4"; exit 1; }
 	@./aur/update.sh "$(VERSION)"
 
 # Update local AUR files and push to aur.archlinux.org.
 # Requires SSH key registered on AUR (AUR_SSH_KEY, default ~/.ssh/id_ed25519_aur).
-# Example: make aur-push VERSION=v1.22.1
-# Optional: AUR_PKGREL=2 make aur-push VERSION=v1.22.1
+# Example: make aur-push VERSION=v1.22.4
+# Optional: AUR_PKGREL=2 make aur-push VERSION=v1.22.4
 aur-push:
 	@echo "$(VERSION)" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$$' || { \
-		echo "VERSION is required, e.g. make aur-push VERSION=v1.22.1"; exit 1; }
+		echo "VERSION is required, e.g. make aur-push VERSION=v1.22.4"; exit 1; }
 	@./aur/update.sh "$(VERSION)" --push
