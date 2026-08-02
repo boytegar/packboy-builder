@@ -73,9 +73,12 @@ func (s *Data) HasPermissionToUseTool(toolName string, args map[string]any, sess
 		return coerceAsk(decide(perm.Prompt, "circuit breaker: "+reason), session)
 	}
 
-	// ── Step 3: BypassPermissions mode ──
-	if session != nil && session.Mode == ModeBypassPermissions {
-		return decide(perm.Permit, "mode: bypass permissions")
+	// ── Step 3: BypassPermissions (orthogonal /yolo toggle) ──
+	// Bypass is independent of Mode so /yolo can be on while the user is in
+	// default, chat, or agent mode. When on, every tool is auto-accepted
+	// (deny rules and the circuit breaker above still apply).
+	if session != nil && session.BypassPermissions {
+		return decide(perm.Permit, "bypass permissions on (/yolo)")
 	}
 
 	// ── Step 4: Confirmation checks ──

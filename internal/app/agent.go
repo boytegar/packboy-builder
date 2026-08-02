@@ -57,10 +57,37 @@ func (m *model) activePersona() *persona.Persona {
 // with — the active persona's three parts, or empty (the built-in default)
 // when no persona is selected.
 func (m *model) personaPrompt() system.Persona {
+	sp := system.Persona{}
 	if p := m.activePersona(); p != nil {
-		return system.Persona{Identity: p.Identity, Behavior: p.Behavior, Rules: p.Rules}
+		sp = system.Persona{Identity: p.Identity, Behavior: p.Behavior, Rules: p.Rules}
 	}
-	return system.Persona{}
+	// Swarm mode layers its behavior on top of any active persona so the agent
+	// always decomposes work into parallel subagents regardless of persona.
+	if m.env.OperationMode == setting.ModeSwarm {
+		swarmOverlay := swarmPersonaOverlay()
+		if sp.Behavior == "" {
+			sp.Behavior = swarmOverlay.Behavior
+		} else {
+			sp.Behavior += "\n\n" + swarmOverlay.Behavior
+		}
+		if sp.Rules == "" {
+			sp.Rules = swarmOverlay.Rules
+		} else {
+			sp.Rules += "\n\n" + swarmOverlay.Rules
+		}
+	}
+	return sp
+}
+
+// swarmPersonaOverlay returns the system-prompt parts that turn the main agent
+// into a swarm driver in ModeSwarm. Behavior is prompt-driven (Opsi B): the
+// agent reuses the existing Agent tool to spawn parallel subagents rather than
+// any new infrastructure.
+func swarmPersonaOverlay() system.Persona {
+	return system.Persona{
+		Behavior: "Swarm mode is active. For any non-trivial request, you MUST decompose the work into independent subtasks and dispatch them in parallel via the Agent tool in a single message (do not run them sequentially). Pick the right subagent for each subtask (e.g. researcher for investigation, test-agent for verification). Synthesize their results into the final answer. For trivial questions that need no decomposition, answer directly.",
+		Rules:    "Never execute a multi-step task single-threaded when it can be split into parallel subtasks. Each subagent call must have a self-contained prompt with all context it needs. Wait for all parallel subagents before synthesizing. If a subtask depends on another's output, run the dependent one after the first completes.",
+	}
 }
 
 // applyPersonaSkills loads the active persona's bundled skills into the skill

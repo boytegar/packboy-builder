@@ -163,8 +163,10 @@ func (m *env) OperationModeName() string {
 		return "auto"
 	case setting.ModeAutoPilot:
 		return "autoPilot"
-	case setting.ModeBypassPermissions:
-		return "bypassPermissions"
+	case setting.ModeReadOnly:
+		return "chat"
+	case setting.ModeSwarm:
+		return "agent"
 	default:
 		return "default"
 	}
@@ -223,11 +225,20 @@ func (m *env) ApplyModePermissions(cwd string) {
 
 func (m *env) ApplyDefaultPermissionMode(mode string, cwd string, allowBypass bool) {
 	opMode := setting.OperationModeFromString(mode)
-	if opMode == setting.ModeBypassPermissions && !allowBypass {
+	// Bypass is no longer an OperationMode; a persisted "bypass" maps to Normal.
+	// The orthogonal /yolo flag is restored separately (see ApplyPersistedBypass).
+	if opMode == setting.ModeBypassPermissions {
 		opMode = setting.ModeNormal
 	}
 	m.OperationMode = opMode
 	m.ApplyModePermissions(cwd)
+	_ = allowBypass // retained for signature compat; bypass gating lives in /yolo
+}
+
+// ApplyPersistedBypass restores the orthogonal bypass flag from settings so
+// /yolo survives restarts independent of the operation mode.
+func (m *env) ApplyPersistedBypass(on bool) {
+	m.SessionPermissions.SetBypass(on)
 }
 
 func (m *env) ClearCachedInstructions() {
@@ -241,8 +252,12 @@ func (m *env) SessionMode() string {
 		return "auto-accept"
 	case setting.ModeAutoPilot:
 		return "auto-pilot"
+	case setting.ModeReadOnly:
+		return "chat"
+	case setting.ModeSwarm:
+		return "agent"
 	default:
-		return "normal"
+		return "default"
 	}
 }
 
@@ -256,6 +271,10 @@ func parseSessionMode(mode string) setting.OperationMode {
 		return setting.ModeAutoAccept
 	case setting.ModeAutoPilot:
 		return setting.ModeAutoPilot
+	case setting.ModeReadOnly:
+		return setting.ModeReadOnly
+	case setting.ModeSwarm:
+		return setting.ModeSwarm
 	default:
 		return setting.ModeNormal
 	}

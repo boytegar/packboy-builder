@@ -39,6 +39,38 @@ func TestSimplifyShipsAsBuiltinPromptCommand(t *testing.T) {
 	}
 }
 
+func TestPlanShipsAsBuiltinPromptCommand(t *testing.T) {
+	reg := &Registry{cwd: t.TempDir()}
+
+	pc, ok := reg.IsCustomCommand("plan")
+	if !ok {
+		t.Fatal("/plan should resolve as a builtin prompt command")
+	}
+	if pc.Scope != scopeBuiltin || pc.FilePath != "" {
+		t.Fatalf("builtin command metadata = %+v", pc)
+	}
+	if pc.Description == "" {
+		t.Fatal("builtin command needs a description for the /help listing")
+	}
+	instructions := pc.GetInstructions()
+	for _, want := range []string{"Phase 1", "Phase 2", "Phase 3", "90%", "AskUserQuestion", "notes/active/"} {
+		if !strings.Contains(instructions, want) {
+			t.Fatalf("plan workflow should mention %q, got %d bytes", want, len(instructions))
+		}
+	}
+
+	// The builtin also surfaces in the aggregate listing for autocomplete.
+	found := false
+	for _, info := range reg.List() {
+		if info.Name == "plan" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("/plan should appear in the command listing")
+	}
+}
+
 func TestDiskCommandShadowsBuiltinPromptCommand(t *testing.T) {
 	root := t.TempDir()
 	cmdsDir := filepath.Join(root, ".pcb", "commands")

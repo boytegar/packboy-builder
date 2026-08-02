@@ -296,3 +296,12 @@ func (e *Engine) getAsyncHookCallback() AsyncHookCallback {
 func (e *Engine) CurrentStatusMessage() string {
 	return e.status.CurrentMessage()
 }
+
+// CurrentStatusMessageSafe is a nil-safe variant for render paths that may run
+// before the hook engine is wired (e.g. early view tests).
+func (e *Engine) CurrentStatusMessageSafe() string {
+	if e == nil {
+		return ""
+	}
+	return e.CurrentStatusMessage()
+}

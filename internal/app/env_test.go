@@ -18,10 +18,14 @@ func TestApplyDefaultPermissionMode_RestoresAllModes(t *testing.T) {
 		{"normal", "normal", true, setting.ModeNormal},
 		{"auto accept", "auto-accept", true, setting.ModeAutoAccept},
 		{"autopilot", "auto-pilot", true, setting.ModeAutoPilot},
-		{"bypass", "bypass", true, setting.ModeBypassPermissions},
+		// Bypass is no longer an OperationMode — a persisted "bypass" folds to
+		// Normal. The orthogonal /yolo flag is restored separately.
+		{"bypass", "bypass", true, setting.ModeNormal},
 		{"bypass disabled", "bypass", false, setting.ModeNormal},
 		{"dont ask", "dont-ask", true, setting.ModeDontAsk},
 		{"read only", "read-only", true, setting.ModeReadOnly},
+		{"swarm", "swarm", true, setting.ModeSwarm},
+		{"agent alias", "agent", true, setting.ModeSwarm},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

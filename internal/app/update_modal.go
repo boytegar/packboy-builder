@@ -16,14 +16,14 @@ import (
 )
 
 func (m *model) cycleOperationMode() tea.Cmd {
-	allowBypass := m.services.Setting.AllowBypass()
-	m.env.OperationMode = m.env.OperationMode.NextWithBypass(allowBypass)
+	m.env.OperationMode = m.env.OperationMode.NextWithBypass(m.services.Setting.AllowBypass())
 	m.applyOperationMode()
 	m.persistOperationMode()
 	// Landing on AutoPilot surfaces the opening proposal (Suggest) — but debounce
 	// it: the cycle wraps through AutoPilot, so a gesture that only passes through
 	// it must not fire a wasted LLM call. Confirm the user actually rested here
-	// (handleAutopilotModeSettled).
+	// (handleAutopilotModeSettled). AutoPilot is no longer in the Shift+Tab cycle,
+	// so this branch is only reached when /autopilot or /goal set the mode.
 	if m.env.OperationMode == setting.ModeAutoPilot {
 		return tea.Tick(autopilotSettleDelay, func(time.Time) tea.Msg { return autopilotModeSettledMsg{} })
 	}
@@ -52,33 +52,34 @@ func (m *model) enterAutoPilotMode() {
 	m.persistOperationMode()
 }
 
-// applyYoloMode sets or toggles bypass-permissions mode from /yolo. Returns the
-// notice shown to the user. Enable nil = toggle; non-nil = force on/off.
-// Enabling is refused when allowBypass is false.
+// applyYoloMode sets or toggles the orthogonal bypass-permissions flag from
+// /yolo. Returns the notice shown to the user. Enable nil = toggle; non-nil =
+// force on/off. Enabling is refused when allowBypass is false. Bypass is
+// independent of OperationMode, so /yolo does not change the active mode
+// (default/chat/agent) — it layers auto-accept on top of it.
 func (m *model) applyYoloMode(enable *bool) string {
+	currentlyOn := m.env.SessionPermissions.IsBypass()
 	wantOn := enable != nil && *enable
 	if enable == nil {
-		wantOn = m.env.OperationMode != setting.ModeBypassPermissions
+		wantOn = !currentlyOn
 	}
 	if wantOn {
 		if !m.services.Setting.AllowBypass() {
 			return "Bypass permissions is locked out (allowBypass: false in settings)."
 		}
-		if m.env.OperationMode == setting.ModeBypassPermissions {
+		if currentlyOn {
 			return "Bypass permissions already on."
 		}
-		m.env.OperationMode = setting.ModeBypassPermissions
-		m.applyOperationMode()
-		m.persistOperationMode()
-		return "Bypass permissions on — tool calls auto-accepted (shift+tab to cycle)."
+		m.env.SessionPermissions.SetBypass(true)
+		m.services.Hook.SetPermissionMode(m.env.OperationModeName())
+		return "Bypass permissions on — tool calls auto-accepted. Active mode: " + m.env.OperationModeName() + " (shift+tab to cycle)."
 	}
-	if m.env.OperationMode != setting.ModeBypassPermissions {
+	if !currentlyOn {
 		return "Bypass permissions already off."
 	}
-	m.env.OperationMode = setting.ModeNormal
-	m.applyOperationMode()
-	m.persistOperationMode()
-	return "Bypass permissions off."
+	m.env.SessionPermissions.SetBypass(false)
+	m.services.Hook.SetPermissionMode(m.env.OperationModeName())
+	return "Bypass permissions off. Active mode: " + m.env.OperationModeName() + "."
 }
 
 // autopilotSettleDelay is how long the mode must rest on AutoPilot before the

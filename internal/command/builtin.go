@@ -15,6 +15,9 @@ func WrapInvocation(name, body string) string {
 //go:embed prompts/simplify.md
 var simplifyPrompt string
 
+//go:embed prompts/plan.md
+var planPrompt string
+
 //go:embed prompts/graph.md
 var graphPrompt string
 
@@ -56,6 +59,12 @@ func builtinPromptCommands() []CustomCommand {
 			Name:        "simplify",
 			Description: "Review the changed code with 4 parallel cleanup agents (reuse, simplification, efficiency, altitude), then apply the fixes",
 			Body:        simplifyPrompt,
+			Scope:       scopeBuiltin,
+		},
+		{
+			Name:        "plan",
+			Description: "Plan a feature/change — gather knowledge to ≥90% confidence, ask clarifying questions if below threshold, then write a grounded plan to notes/active/",
+			Body:        planPrompt,
 			Scope:       scopeBuiltin,
 		},
 		{

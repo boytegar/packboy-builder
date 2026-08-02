@@ -772,7 +772,8 @@ func TestIsRootOrHomeRemoval(t *testing.T) {
 func TestBypassPermissionsMode(t *testing.T) {
 	settings := &Data{}
 	session := &SessionPermissions{
-		Mode:               ModeBypassPermissions,
+		Mode:               ModeNormal,
+		BypassPermissions:  true, // bypass is now an orthogonal /yolo flag
 		AllowedTools:       make(map[string]bool),
 		AllowedPatterns:    make(map[string]bool),
 		WorkingDirectories: []string{"/repo"},
@@ -1128,18 +1129,25 @@ func TestResolveHookAllow(t *testing.T) {
 }
 
 func TestOperationModeNext(t *testing.T) {
-	// Normal → AutoAccept → AutoPilot → Normal
-	if ModeNormal.Next() != ModeAutoAccept {
-		t.Errorf("Normal.Next() = %v, want AutoAccept", ModeNormal.Next())
+	// The Shift+Tab cycle is the three primary modes:
+	// Normal (default) → ReadOnly (chat) → Swarm (agent) → Normal
+	if ModeNormal.Next() != ModeReadOnly {
+		t.Errorf("Normal.Next() = %v, want ReadOnly", ModeNormal.Next())
 	}
-	if ModeAutoAccept.Next() != ModeAutoPilot {
-		t.Errorf("AutoAccept.Next() = %v, want AutoPilot", ModeAutoAccept.Next())
+	if ModeReadOnly.Next() != ModeSwarm {
+		t.Errorf("ReadOnly.Next() = %v, want Swarm", ModeReadOnly.Next())
 	}
-	if ModeAutoPilot.Next() != ModeNormal {
-		t.Errorf("AutoPilot.Next() = %v, want Normal", ModeAutoPilot.Next())
+	if ModeSwarm.Next() != ModeNormal {
+		t.Errorf("Swarm.Next() = %v, want Normal", ModeSwarm.Next())
 	}
-	// BypassPermissions is not in cycle — goes back to Normal
+	// Modes outside the cycle return to Normal.
 	if ModeBypassPermissions.Next() != ModeNormal {
 		t.Errorf("Bypass.Next() = %v, want Normal", ModeBypassPermissions.Next())
+	}
+	if ModeAutoAccept.Next() != ModeNormal {
+		t.Errorf("AutoAccept.Next() = %v, want Normal (no longer in cycle)", ModeAutoAccept.Next())
+	}
+	if ModeAutoPilot.Next() != ModeNormal {
+		t.Errorf("AutoPilot.Next() = %v, want Normal (no longer in cycle)", ModeAutoPilot.Next())
 	}
 }

@@ -461,7 +461,7 @@ type HookCmd struct {
 type SessionPermissions struct {
 	mu sync.RWMutex
 
-	Mode            OperationMode // Active permission mode (Normal, BypassPermissions, DontAsk, etc.)
+	Mode            OperationMode // Active permission mode (Normal, ReadOnly, Swarm, DontAsk, etc.)
 	AllowAllEdits   bool
 	AllowAllWrites  bool
 	AllowAllBash    bool
@@ -470,6 +470,12 @@ type SessionPermissions struct {
 	AllowedTools    map[string]bool
 	AllowedPatterns map[string]bool
 	Denials         DenialTracking // Tracks denial frequency for fallback
+
+	// BypassPermissions is the orthogonal /yolo toggle: when on, every tool is
+	// auto-accepted (after deny rules and the root/home circuit breaker) regardless
+	// of the active operation mode. It is independent of Mode so bypass can be on
+	// while the user is in chat, agent, or default mode.
+	BypassPermissions bool
 
 	// WorkingDirectories restricts Edit/Write operations to these directories.
 	// When non-empty, file edits outside these dirs prompt for confirmation
@@ -512,6 +518,7 @@ func (sp *SessionPermissions) Snapshot() *SessionPermissions {
 		AllowedTools:       maps.Clone(sp.AllowedTools),
 		AllowedPatterns:    maps.Clone(sp.AllowedPatterns),
 		Denials:            sp.Denials,
+		BypassPermissions:  sp.BypassPermissions,
 		WorkingDirectories: slices.Clone(sp.WorkingDirectories),
 		ShouldAvoidPrompts: sp.ShouldAvoidPrompts,
 	}
@@ -519,6 +526,9 @@ func (sp *SessionPermissions) Snapshot() *SessionPermissions {
 
 // ResetPosture clears the blanket allowances and returns to Normal mode. One
 // critical section, so a reader never observes a half-cleared posture.
+// ResetPosture clears the blanket allowances and returns to Normal mode, but
+// preserves BypassPermissions — bypass is an orthogonal /yolo toggle that
+// survives mode changes. Use ResetAll to also clear bypass (session reset).
 func (sp *SessionPermissions) ResetPosture() {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
@@ -529,12 +539,48 @@ func (sp *SessionPermissions) ResetPosture() {
 	sp.Mode = ModeNormal
 }
 
+// ResetAll clears the whole posture including the orthogonal bypass flag.
+// Used on session reset/clear, where nothing should survive.
+func (sp *SessionPermissions) ResetAll() {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	sp.AllowAllEdits = false
+	sp.AllowAllWrites = false
+	sp.AllowAllBash = false
+	sp.AllowAllSkills = false
+	sp.Mode = ModeNormal
+	sp.BypassPermissions = false
+}
+
 // SetMode points the session at an operation mode without touching the
 // allowances layered on top of it.
 func (sp *SessionPermissions) SetMode(mode OperationMode) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	sp.Mode = mode
+}
+
+// SetBypass toggles the orthogonal /yolo bypass flag independent of Mode.
+func (sp *SessionPermissions) SetBypass(on bool) {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	sp.BypassPermissions = on
+}
+
+// IsBypass reports whether the orthogonal /yolo bypass flag is on.
+func (sp *SessionPermissions) IsBypass() bool {
+	sp.mu.RLock()
+	defer sp.mu.RUnlock()
+	return sp.BypassPermissions
+}
+
+// IsBypassSafe is a nil-safe variant for render paths that may run before the
+// session permissions are wired (e.g. during early view tests).
+func (sp *SessionPermissions) IsBypassSafe() bool {
+	if sp == nil {
+		return false
+	}
+	return sp.IsBypass()
 }
 
 // GrantEditPosture auto-approves edits and writes and trusts cwd, as one
@@ -614,13 +660,18 @@ const (
 	ModeDontAsk                         // convert ask → deny (never prompt)
 	ModeReadOnly                        // safe tools only; everything else denied (subagent explore)
 	ModeAutoPilot                       // auto-approve edits; delegate the rest to the review agent
+	ModeSwarm                           // agent: every turn decomposes and runs parallel subagents
 )
 
-// allModes lists the modes that the user can cycle through with the mode toggle.
-// BypassPermissions is only reachable when explicitly enabled; DontAsk and
-// ReadOnly are entered programmatically (headless subagents), not via cycling.
-var cycleModes = []OperationMode{ModeNormal, ModeAutoAccept, ModeAutoPilot}
-var cycleModesWithBypass = []OperationMode{ModeNormal, ModeAutoAccept, ModeAutoPilot, ModeBypassPermissions}
+// allModes lists the modes that the user can cycle through with Shift+Tab.
+// The cycle is the three primary modes only: default → chat → agent → default.
+// AutoAccept, AutoPilot, BypassPermissions, DontAsk, and ReadOnly are
+// entered programmatically (via /goal, /autopilot, /yolo, or subagent
+// contexts) — not via the Shift+Tab cycle. ReadOnly and Swarm are reachable
+// from the cycle despite also being OperationMode values, so they live in
+// cycleModes. AutoPilot is engaged through /autopilot or /goal.
+var cycleModes = []OperationMode{ModeNormal, ModeReadOnly, ModeSwarm}
+var cycleModesWithBypass = []OperationMode{ModeNormal, ModeReadOnly, ModeSwarm}
 
 func (m OperationMode) String() string {
 	switch m {
@@ -634,8 +685,10 @@ func (m OperationMode) String() string {
 		return "don't ask"
 	case ModeReadOnly:
 		return "read-only"
+	case ModeSwarm:
+		return "swarm"
 	default:
-		return "normal"
+		return "default"
 	}
 }
 
@@ -651,8 +704,10 @@ func (m OperationMode) PersistenceName() string {
 		return "dont-ask"
 	case ModeReadOnly:
 		return "read-only"
+	case ModeSwarm:
+		return "swarm"
 	default:
-		return "normal"
+		return "default"
 	}
 }
 
@@ -669,35 +724,31 @@ func OperationModeFromString(mode string) OperationMode {
 		return ModeDontAsk
 	case "readOnly", "read-only":
 		return ModeReadOnly
+	case "swarm", "agent":
+		return ModeSwarm
 	default:
 		return ModeNormal
 	}
 }
 
+// Next cycles to the next primary operation mode: default → chat → agent → default.
+// Modes outside the cycle (AutoPilot, AutoAccept, BypassPermissions, DontAsk)
+// return to Normal when Next is called, so leaving a programmatic mode always
+// lands on the default posture.
 func (m OperationMode) Next() OperationMode {
 	for i, mode := range cycleModes {
 		if mode == m {
 			return cycleModes[(i+1)%len(cycleModes)]
 		}
 	}
-	// If current mode is not in the cycle list (e.g. BypassPermissions),
-	// return to normal.
 	return ModeNormal
 }
 
-// NextWithBypass cycles to the next operation mode.
-// When enabled is true, BypassPermissions is included in the cycle.
-func (m OperationMode) NextWithBypass(enabled bool) OperationMode {
-	modes := cycleModes
-	if enabled {
-		modes = cycleModesWithBypass
-	}
-	for i, mode := range modes {
-		if mode == m {
-			return modes[(i+1)%len(modes)]
-		}
-	}
-	return ModeNormal
+// NextWithBypass cycles to the next primary operation mode. The enabled flag
+// is retained for call-site compatibility but no longer adds BypassPermissions
+// to the cycle — bypass is now an orthogonal toggle (SetBypass), not a mode.
+func (m OperationMode) NextWithBypass(_ bool) OperationMode {
+	return m.Next()
 }
 
 func NewData() *Data {

@@ -202,6 +202,7 @@ func fitStatusSegments(segments []statusSegment, maxWidth, sepWidth int) []strin
 // OperationModeParams holds the parameters needed for rendering mode status.
 type OperationModeParams struct {
 	Mode              setting.OperationMode
+	Bypass            bool // orthogonal /yolo flag — rendered as a separate badge
 	InputTokens       int
 	InputLimit        int
 	ModelName         string
@@ -218,6 +219,10 @@ type OperationModeParams struct {
 }
 
 // RenderModeStatus renders the combined mode status line.
+//
+// The mode indicator (left) and the context cluster (right) share the primary
+// line. The bypass badge, when on, renders on its own line directly below so
+// it never squeezes the context count off the right side of the primary line.
 func RenderModeStatus(params OperationModeParams) string {
 	var leftParts []string
 
@@ -234,12 +239,28 @@ func RenderModeStatus(params OperationModeParams) string {
 	left := strings.Join(leftParts, "  ")
 
 	right := renderStatusCluster(params)
-	if right == "" || params.Width <= 0 {
-		return left
+	primary := left
+	if right != "" && params.Width > 0 {
+		gap := max(2, params.Width-lipgloss.Width(left)-lipgloss.Width(right)-1)
+		primary = left + strings.Repeat(" ", gap) + right
 	}
 
-	gap := max(2, params.Width-lipgloss.Width(left)-lipgloss.Width(right)-1)
-	return left + strings.Repeat(" ", gap) + right
+	// Bypass renders on a second line below the mode row so the context count
+	// on the primary line's right edge stays visible.
+	if params.Bypass {
+		if bypassStatus := RenderBypassIndicator(); bypassStatus != "" {
+			return primary + "\n" + bypassStatus
+		}
+	}
+	return primary
+}
+
+// RenderBypassIndicator renders the orthogonal /yolo bypass badge on its own
+// line below the mode indicator when /yolo is on.
+func RenderBypassIndicator() string {
+	style := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Error)
+	hint := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted).Render(" (/yolo)")
+	return style.Render("⚡ bypass on") + hint
 }
 
 // renderStatusCluster composes the status line's right-hand cluster, in
@@ -305,12 +326,26 @@ func compactStatusHint(percent float64) string {
 	}
 }
 
-// RenderOperationModeIndicator returns the mode status indicator for auto-accept, auto-review, or bypass mode.
+// RenderOperationModeIndicator returns the mode status indicator for every
+// operation mode — always visible so the active mode is obvious at a glance
+// below the context bar.
 func RenderOperationModeIndicator(mode setting.OperationMode, reviewApprovals, reviewEscalations int, autopilotThinking bool) string {
 	var icon, label string
 	var clr kit.AdaptiveColor
 
 	switch mode {
+	case setting.ModeNormal:
+		icon = "●"
+		label = " default mode"
+		clr = kit.CurrentTheme.Muted
+	case setting.ModeReadOnly:
+		icon = "🔒"
+		label = " chat mode (read-only)"
+		clr = kit.CurrentTheme.Accent
+	case setting.ModeSwarm:
+		icon = "🐝"
+		label = " agent mode (swarm)"
+		clr = kit.CurrentTheme.Accent
 	case setting.ModeAutoAccept:
 		icon = "⏵⏵"
 		label = " accept edits on"
@@ -319,10 +354,6 @@ func RenderOperationModeIndicator(mode setting.OperationMode, reviewApprovals, r
 		icon = "⏵⏵"
 		label = " autopilot on"
 		clr = kit.CurrentTheme.Warning
-	case setting.ModeBypassPermissions:
-		icon = "⏵⏵"
-		label = " bypass permissions on"
-		clr = kit.CurrentTheme.Error
 	default:
 		return ""
 	}
