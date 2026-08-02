@@ -169,7 +169,7 @@ type ProviderSelector struct {
 	spinnerTick int
 
 	// Subagents tab state.
-	agentRegistry AgentRegistry       // nil = Subagents tab unavailable
+	agentRegistry AgentRegistry         // nil = Subagents tab unavailable
 	settings      *coresetting.Settings // for reading/writing subagentModels
 	subAgents     []tool.AgentConfigInfo
 	subAgentPhase int    // 0 = pick agent, 1 = pick model

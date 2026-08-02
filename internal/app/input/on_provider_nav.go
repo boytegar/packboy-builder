@@ -71,8 +71,12 @@ func (s *ProviderSelector) providerTabCount() int {
 	return 2
 }
 
-func (s *ProviderSelector) NextTab() { s.switchTab(providerTab((int(s.activeTab) + 1) % s.providerTabCount())) }
-func (s *ProviderSelector) PrevTab() { s.switchTab(providerTab((int(s.activeTab) + 1 + s.providerTabCount()) % s.providerTabCount())) }
+func (s *ProviderSelector) NextTab() {
+	s.switchTab(providerTab((int(s.activeTab) + 1) % s.providerTabCount()))
+}
+func (s *ProviderSelector) PrevTab() {
+	s.switchTab(providerTab((int(s.activeTab) + 1 + s.providerTabCount()) % s.providerTabCount()))
+}
 
 func (s *ProviderSelector) GoBack() bool {
 	if s.handleSubagentBack() {
