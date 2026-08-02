@@ -2,9 +2,9 @@
 # Update aur/pcb-bin for a published GitHub release and optionally push to AUR.
 #
 # Usage:
-#   ./aur/update.sh 1.22.1           # refresh local PKGBUILD + .SRCINFO only
-#   ./aur/update.sh 1.22.1 --push    # also commit + push to aur.archlinux.org
-#   ./aur/update.sh v1.22.1 --push
+#   ./aur/update.sh 1.22.4           # refresh local PKGBUILD + .SRCINFO only
+#   ./aur/update.sh 1.22.4 --push    # also commit + push to aur.archlinux.org
+#   ./aur/update.sh v1.22.4 --push
 #
 # Env:
 #   AUR_SSH_KEY   path to SSH private key (default: ~/.ssh/id_ed25519_aur)
@@ -23,7 +23,7 @@ PUSH=0
 
 usage() {
 	echo "Usage: $0 <version> [--push]" >&2
-	echo "  version   release version with or without leading v (e.g. 1.22.1)" >&2
+	echo "  version   release version with or without leading v (e.g. 1.22.4)" >&2
 	echo "  --push    clone AUR repo, commit PKGBUILD/.SRCINFO, and push" >&2
 	exit 1
 }
