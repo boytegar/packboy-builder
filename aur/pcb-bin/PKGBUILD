@@ -11,8 +11,8 @@ conflicts=('pcb' 'pcb-git')
 options=('!strip' '!debug')
 source_x86_64=("$url/releases/download/v$pkgver/packboy-builder_linux_amd64.tar.gz")
 source_aarch64=("$url/releases/download/v$pkgver/packboy-builder_linux_arm64.tar.gz")
-sha256sums_x86_64=('4b4b9974234af66efa26a75638987530eb1ac9b6ffe3374e3676593157915cb5')
-sha256sums_aarch64=('e7d971c047b3405cf8efe4dfdc1bf027d50e1e39daeba0f0751a7f0b5b402f59')
+sha256sums_x86_64=('599ba03ab11465fad3442f1600e4aae3de2366fc73b4afd93262ce31ed659b79')
+sha256sums_aarch64=('2d3d8d520f150a9a23cdd23e24216ddf6d74557c388aab11d595c62779fd7ca9')
 
 package() {
     install -Dm755 pcb "$pkgdir/usr/bin/pcb"

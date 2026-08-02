@@ -72,12 +72,23 @@ curl -fsSL https://raw.githubusercontent.com/boytegar/packboy-builder/main/insta
 irm https://raw.githubusercontent.com/boytegar/packboy-builder/main/install.ps1 | iex
 ```
 
-Start with `pcb`. On first launch, choose a model and add its API key when prompted. To update later, run `pcb update`.
+Start with `pcb`. On first launch, choose a model and add its API key when prompted.
 
-<details>
-<summary><b>Other methods</b></summary>
+### Upgrade
 
-**Uninstall**
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/boytegar/packboy-builder/main/install.sh | bash -s upgrade
+```
+
+```powershell
+# Windows (PowerShell)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/boytegar/packboy-builder/main/install.ps1))) upgrade
+```
+
+Or from within the TUI: `pcb update`.
+
+### Uninstall
 
 ```bash
 # macOS / Linux
@@ -88,6 +99,9 @@ curl -fsSL https://raw.githubusercontent.com/boytegar/packboy-builder/main/insta
 # Windows (PowerShell)
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/boytegar/packboy-builder/main/install.ps1))) uninstall
 ```
+
+<details>
+<summary><b>Other methods</b></summary>
 
 **Go Install (requires Go 1.25.8+)**
 
@@ -102,6 +116,12 @@ git clone https://github.com/boytegar/packboy-builder.git
 cd pcb
 go build -o pcb ./cmd/pcb
 mkdir -p ~/.local/bin && mv pcb ~/.local/bin/
+```
+
+**Arch Linux (AUR)**
+
+```bash
+yay -S pcb-bin
 ```
 
 </details>
