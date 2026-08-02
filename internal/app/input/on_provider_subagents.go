@@ -49,6 +49,21 @@ func (s *ProviderSelector) rebuildSubagentsAgentList() {
 	s.subAgents = configs
 
 	override := s.currentSubagentOverrides()
+
+	// Top row: the global default model applied to every subagent without a
+	// more specific override. Pinned above the per-agent list so it reads as
+	// "the fallback for the inherit/empty rows below."
+	defaultEffective := "inherit"
+	if s.settings != nil {
+		if d := strings.TrimSpace(s.settings.Snapshot().SubagentDefaultModel); d != "" {
+			defaultEffective = d
+		}
+	}
+	s.visibleItems = append(s.visibleItems, providerListItem{
+		Kind:     providerItemSubagentDefault,
+		Subagent: &tool.AgentConfigInfo{Name: "Default model", Model: defaultEffective},
+	})
+
 	for i := range configs {
 		c := &configs[i]
 		if c.Name == "" {
@@ -168,10 +183,15 @@ func (s *ProviderSelector) parentProviderNameForSubagents() llm.Name {
 // clearSubagentOverride persists an "inherit" (no override) for the selected agent.
 func (s *ProviderSelector) clearSubagentOverride() tea.Cmd {
 	name := s.subSelected
+	isDefault := name == ""
 	s.subAgentPhase = 0
 	s.subSelected = ""
 	s.active = false
 	return func() tea.Msg {
+		if isDefault {
+			_ = setting.UpdateSubagentDefaultModel("inherit", true)
+			return subagentModelSavedMsg{AgentName: "Default model", Model: "inherit"}
+		}
 		_ = setting.UpdateSubagentModelAt(name, "inherit", true)
 		return subagentModelSavedMsg{AgentName: name, Model: "inherit"}
 	}
@@ -190,7 +210,11 @@ func (s *ProviderSelector) renderSubagentRow(item providerListItem, isSelected b
 		name = fmt.Sprintf("%s %s", c.Name, kit.DimStyle().Render(c.Model))
 	}
 	line := fmt.Sprintf("%s %s", indicator, name)
-	if desc := strings.TrimSpace(c.Description); desc != "" {
+	desc := strings.TrimSpace(c.Description)
+	if item.Kind == providerItemSubagentDefault {
+		desc = "fallback for inherit/empty rows"
+	}
+	if desc != "" {
 		const prefixAndGap = 4
 		budget := s.panel().ContentWidth() - lipglossWidth(line) - prefixAndGap
 		if budget >= 8 {
@@ -214,6 +238,9 @@ func (s *ProviderSelector) handleSubagentSelect() tea.Cmd {
 	}
 	item := s.visibleItems[s.selectedIdx]
 	if s.subAgentPhase == 0 {
+		if item.Kind == providerItemSubagentDefault {
+			return s.selectSubagent("") // "" marks the global default slot
+		}
 		if item.Kind != providerItemSubagent || item.Subagent == nil {
 			return nil
 		}
@@ -225,10 +252,15 @@ func (s *ProviderSelector) handleSubagentSelect() tea.Cmd {
 	}
 	name := s.subSelected
 	ref := s.subagentModelRef(item.Model)
+	isDefault := name == ""
 	s.active = false
 	s.subAgentPhase = 0
 	s.subSelected = ""
 	return func() tea.Msg {
+		if isDefault {
+			_ = setting.UpdateSubagentDefaultModel(ref, true)
+			return subagentModelSavedMsg{AgentName: "Default model", Model: ref}
+		}
 		_ = setting.UpdateSubagentModelAt(name, ref, true)
 		return subagentModelSavedMsg{AgentName: name, Model: ref}
 	}
@@ -259,8 +291,12 @@ func (s *ProviderSelector) subagentsTabActive() bool {
 
 // subagentPhaseLabel is the small header shown above the model list in phase 1.
 func (s *ProviderSelector) subagentPhaseLabel() string {
+	name := s.subSelected
+	if name == "" {
+		name = "Default model"
+	}
 	return kit.DimStyle().PaddingLeft(2).Render(
-		fmt.Sprintf("Pick model for %s — Enter saves · i inherit · ← back", s.subSelected))
+		fmt.Sprintf("Pick model for %s — Enter saves · i inherit · ← back", name))
 }
 
 // handleSubagentInheritKey routes the "i" key on phase 1 to clear the override.

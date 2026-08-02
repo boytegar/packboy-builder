@@ -16,6 +16,7 @@ func TestClonePreservesAllScalarFields(t *testing.T) {
 		AllowBypass:    &yes,
 		Persona:        "ml-researcher",
 		SkillDirs:      []string{"/mnt/shared/skills", "~/team-skills"},
+		SubagentDefaultModel: "haiku",
 		SelfLearn: SelfLearnSettings{
 			Memory:   SelfLearnMemory{Enabled: true, MaxKB: 15},
 			Skills:   SelfLearnSkills{DenyCreate: true},
@@ -42,6 +43,9 @@ func TestClonePreservesAllScalarFields(t *testing.T) {
 	}
 	if dst.Persona != src.Persona {
 		t.Errorf("Persona: got %q, want %q", dst.Persona, src.Persona)
+	}
+	if dst.SubagentDefaultModel != src.SubagentDefaultModel {
+		t.Errorf("SubagentDefaultModel: got %q, want %q", dst.SubagentDefaultModel, src.SubagentDefaultModel)
 	}
 	// SkillDirs must round-trip and be an independent copy so mutating dst
 	// cannot bleed back into src.
@@ -99,6 +103,34 @@ func TestCloneSubagentModels(t *testing.T) {
 	clone.SubagentModels["coder"] = "opus"
 	if src.SubagentModels["coder"] != "haiku" {
 		t.Errorf("clone leaked: src coder = %q, want haiku", src.SubagentModels["coder"])
+	}
+}
+
+// TestMergeSettingsCoalescesSubagentDefaultModel guards the coalesce merge for
+// the global default: overlay's non-empty value wins; base survives an empty
+// overlay.
+func TestMergeSettingsCoalescesSubagentDefaultModel(t *testing.T) {
+	base := &Data{SubagentDefaultModel: "haiku"}
+	overlay := &Data{SubagentDefaultModel: "opus"}
+
+	got := mergeSettings(base, overlay)
+	if got.SubagentDefaultModel != "opus" {
+		t.Errorf("overlay default: got %q, want opus", got.SubagentDefaultModel)
+	}
+
+	got = mergeSettings(&Data{SubagentDefaultModel: "haiku"}, &Data{})
+	if got.SubagentDefaultModel != "haiku" {
+		t.Errorf("base-only default: got %q, want haiku", got.SubagentDefaultModel)
+	}
+}
+
+// TestCloneSubagentDefaultModel guards the scalar clone of the global default.
+func TestCloneSubagentDefaultModel(t *testing.T) {
+	src := &Data{SubagentDefaultModel: "haiku"}
+	clone := src.Clone()
+	clone.SubagentDefaultModel = "opus"
+	if src.SubagentDefaultModel != "haiku" {
+		t.Errorf("clone leaked: src default = %q, want haiku", src.SubagentDefaultModel)
 	}
 }
 

@@ -317,6 +317,22 @@ func UpdateLastOperationMode(mode OperationMode) error {
 // frontmatter takes over again); an alias, a bare model id, or
 // "vendor/model" sets it. The block replaces the whole subagentModels map for
 // the level (cross-level layering still merges per-key on Load).
+// UpdateSubagentDefaultModel sets or clears the global default model applied to
+// every subagent that has no more specific override (Agent tool call,
+// SubagentModels per-name entry, or frontmatter "model" field). model accepts
+// the same forms as UpdateSubagentModelAt: "inherit" or "" clears it (subagents
+// fall back to the frontmatter then the parent model); an alias, a bare model
+// id, or "vendor/model" sets it.
+func UpdateSubagentDefaultModel(model string, userLevel bool) error {
+	return updateSettingsFile(userLevel, func(d *Data) {
+		if model == "" || model == "inherit" {
+			d.SubagentDefaultModel = ""
+			return
+		}
+		d.SubagentDefaultModel = model
+	})
+}
+
 func UpdateSubagentModelAt(name, model string, userLevel bool) error {
 	return updateSettingsFile(userLevel, func(d *Data) {
 		if model == "" || model == "inherit" {

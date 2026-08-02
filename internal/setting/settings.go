@@ -75,6 +75,16 @@ type Data struct {
 	// steers, how it drives (model + system prompt), and the mission it steers
 	// toward (JSON key "autoPilot").
 	AutoPilot AutoPilotSettings `json:"autoPilot,omitempty"`
+	// SubagentDefaultModel is the global default model for all subagents that do
+	// not have a more specific override. It applies only when neither the Agent
+	// tool call, the SubagentModels per-name entry, nor the agent definition's
+	// frontmatter "model" field resolves to a concrete model (i.e. the
+	// frontmatter is empty or "inherit"). Uses the same forms as SubagentModels:
+	// "inherit"/"" = fall back to the parent model; an alias, a bare model id,
+	// or "vendor/model". Resolution priority:
+	// Agent tool call override → SubagentModels entry → frontmatter → this
+	// default → parent conversation model.
+	SubagentDefaultModel string `json:"subagentDefaultModel,omitempty"`
 	// SubagentModels maps a subagent name to a model override, picked via the
 	// /models Subagents tab and persisted to settings.json. The value uses the
 	// same forms as the AGENT.md frontmatter "model" field: "inherit" or empty
@@ -769,6 +779,7 @@ func (s *Data) Clone() *Data {
 	if s.SkillDirs != nil {
 		dst.SkillDirs = append([]string(nil), s.SkillDirs...)
 	}
+	dst.SubagentDefaultModel = s.SubagentDefaultModel
 	if s.SubagentModels != nil {
 		dst.SubagentModels = make(map[string]string, len(s.SubagentModels))
 		for k, v := range s.SubagentModels {

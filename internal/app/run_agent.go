@@ -66,11 +66,11 @@ func RunAgent(opts AgentRunOptions) error {
 	// as TUI-spawned subagents.
 	executor := subagent.NewExecutor(provider, cwd, modelID, nil)
 	executor.SetResolver(llm.NewProviderPool(llm.Default().Store()))
-	executor.SetSubagentModelOverride(func(name string) string {
+	executor.SetSubagentModelOverride(func(name string) (string, string) {
 		if data, err := setting.Load(); err == nil && data != nil {
-			return data.SubagentModels[name]
+			return data.SubagentModels[name], data.SubagentDefaultModel
 		}
-		return ""
+		return "", ""
 	})
 
 	if opts.Name != "" {

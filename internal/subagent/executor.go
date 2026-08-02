@@ -52,11 +52,12 @@ type Executor struct {
 	disabledToolsMu            sync.RWMutex
 	disabledTools              map[string]bool // effective global disabled tools, copied on set/read
 
-	// subagentModelOverride resolves a per-subagent model override from
-	// settings.json (set via the /models Subagents tab). It returns the
-	// override string for the agent name, or "" when no override is set so
-	// resolution falls back to the frontmatter. nil = overrides not wired.
-	subagentModelOverride func(agentName string) string
+	// subagentModelOverride resolves per-subagent and global default model
+	// overrides from settings.json (set via the /models Subagents tab). It
+	// returns the per-name override and the global default, either of which
+	// may be "" so resolution falls back to the frontmatter / parent. nil =
+	// overrides not wired.
+	subagentModelOverride func(agentName string) (override, defaultModel string)
 }
 
 type SubagentSessionStore interface {
@@ -143,11 +144,11 @@ func (e *Executor) SetModelStore(store *llm.Store, provider llm.Name, authMethod
 	e.parentAuthMethod = authMethod
 }
 
-// SetSubagentModelOverride wires the settings.json-backed per-subagent model
-// override lookup (set via the /models Subagents tab). fn returns the override
-// string for an agent name, or "" when no override is set. nil fn clears the
-// override lookup so resolution falls back to the frontmatter.
-func (e *Executor) SetSubagentModelOverride(fn func(agentName string) string) {
+// SetSubagentModelOverride wires the settings.json-backed model override
+// lookup (set via the /models Subagents tab). fn returns the per-name override
+// and the global default model; either may be "" when not set. nil fn clears
+// the override lookup so resolution falls back to the frontmatter.
+func (e *Executor) SetSubagentModelOverride(fn func(agentName string) (override, defaultModel string)) {
 	e.subagentModelOverride = fn
 }
 
@@ -591,11 +592,20 @@ func (e *Executor) fireSubagentStop(req tool.AgentExecRequest, agentHookID, agen
 // id, or "inherit" — stays on the parent's provider, preserving prior behavior.
 func (e *Executor) resolveModel(ctx context.Context, requestModel, configModel, agentName string) (llm.Provider, string, error) {
 	ref := strings.TrimSpace(requestModel)
+	var defaultRef string
 	if ref == "" && e.subagentModelOverride != nil {
-		ref = strings.TrimSpace(e.subagentModelOverride(agentName))
+		override, def := e.subagentModelOverride(agentName)
+		ref = strings.TrimSpace(override)
+		defaultRef = strings.TrimSpace(def)
 	}
 	if ref == "" {
 		ref = strings.TrimSpace(configModel)
+	}
+	// A concrete frontmatter value (not "" or "inherit") wins over the global
+	// default. Only when the frontmatter is absent or explicitly inherits do we
+	// fall back to the global default, so "inherit" still means "not this one".
+	if (ref == "" || ref == "inherit") && defaultRef != "" {
+		ref = defaultRef
 	}
 	if ref == "" || ref == "inherit" {
 		return e.provider, e.parentModelID, nil

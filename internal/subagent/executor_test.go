@@ -108,11 +108,11 @@ func TestResolveModelUsesConfigBeforeParent(t *testing.T) {
 func TestResolveModelSettingsOverrideBeatsConfig(t *testing.T) {
 	executor := &Executor{
 		parentModelID: "parent-model",
-		subagentModelOverride: func(name string) string {
+		subagentModelOverride: func(name string) (string, string) {
 			if name == "coder" {
-				return "haiku"
+				return "haiku", ""
 			}
-			return ""
+			return "", ""
 		},
 	}
 	ctx := context.Background()
@@ -128,6 +128,42 @@ func TestResolveModelSettingsOverrideBeatsConfig(t *testing.T) {
 	// Request override still wins over settings.
 	if _, got, _ := executor.resolveModel(ctx, "override-model", "sonnet", "coder"); got != "override-model" {
 		t.Fatalf("request override = %q, want override", got)
+	}
+}
+
+func TestResolveModelGlobalDefault(t *testing.T) {
+	executor := &Executor{
+		parentModelID: "parent-model",
+		subagentModelOverride: func(name string) (string, string) {
+			return "", "haiku" // no per-name override; global default = haiku
+		},
+	}
+	ctx := context.Background()
+
+	// Empty frontmatter → global default applies.
+	if _, got, _ := executor.resolveModel(ctx, "", "", ""); got != "claude-haiku-4-5" {
+		t.Fatalf("empty frontmatter + default = %q, want haiku", got)
+	}
+	// "inherit" frontmatter → global default applies (inherit means "not this one").
+	if _, got, _ := executor.resolveModel(ctx, "", "inherit", "researcher"); got != "claude-haiku-4-5" {
+		t.Fatalf("inherit frontmatter + default = %q, want haiku", got)
+	}
+	// Concrete frontmatter wins over the global default.
+	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "coder"); got != "claude-sonnet-4-6" {
+		t.Fatalf("concrete frontmatter + default = %q, want sonnet", got)
+	}
+	// Per-name override wins over the global default.
+	executor2 := &Executor{
+		parentModelID: "parent-model",
+		subagentModelOverride: func(name string) (string, string) {
+			if name == "coder" {
+				return "opus", "haiku"
+			}
+			return "", "haiku"
+		},
+	}
+	if _, got, _ := executor2.resolveModel(ctx, "", "", "coder"); got != "claude-opus-4-7" {
+		t.Fatalf("per-name override + default = %q, want opus", got)
 	}
 }
 
