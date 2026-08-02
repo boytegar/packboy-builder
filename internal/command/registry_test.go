@@ -59,11 +59,17 @@ func TestGetMatchingCommands_IncludesDynamicProviders(t *testing.T) {
 	}))
 
 	matches := Default().GetMatching("sea")
-	if len(matches) != 1 {
-		t.Fatalf("expected 1 matching dynamic command, got %d", len(matches))
+	// Find the dynamic "search" command among matches (builtin prompt commands
+	// like kg-schema may also fuzzy-match "sea" as a subsequence).
+	var foundSearch bool
+	for _, m := range matches {
+		if m.Name == "search" {
+			foundSearch = true
+			break
+		}
 	}
-	if matches[0].Name != "search" {
-		t.Fatalf("unexpected dynamic command %q", matches[0].Name)
+	if !foundSearch {
+		t.Fatalf("dynamic 'search' command not matched; got %d matches", len(matches))
 	}
 }
 
@@ -368,3 +374,4 @@ func TestPluginCommandScope(t *testing.T) {
 		t.Errorf("scope = %d, want %d (scopeProjectPlugin for IsProject=true)", pc.Scope, scopeProjectPlugin)
 	}
 }
+

@@ -12,8 +12,8 @@ pkgbase = pcb-bin
 	options = !strip
 	options = !debug
 	source_x86_64 = https://github.com/boytegar/packboy-builder/releases/download/v1.22.5/packboy-builder_linux_amd64.tar.gz
-	sha256sums_x86_64 = 599ba03ab11465fad3442f1600e4aae3de2366fc73b4afd93262ce31ed659b79
+	sha256sums_x86_64 = 126a97e212f2d1325b52187dd2cb852ac68d2a96a6af7ae0b0f7d98422d09e09
 	source_aarch64 = https://github.com/boytegar/packboy-builder/releases/download/v1.22.5/packboy-builder_linux_arm64.tar.gz
-	sha256sums_aarch64 = 2d3d8d520f150a9a23cdd23e24216ddf6d74557c388aab11d595c62779fd7ca9
+	sha256sums_aarch64 = 1dd7e82ef089743eac0e778571e300f4863b30b3d6049dd27c75b3d36874412d
 
 pkgname = pcb-bin
