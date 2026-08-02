@@ -86,7 +86,7 @@ func initExtensions(cwd string) {
 	if err := plugin.Initialize(context.Background(), plugin.Options{CWD: cwd}); err != nil {
 		log.Logger().Warn("Failed to initialize plugin", zap.Error(err))
 	}
-	skill.Initialize(skill.Options{CWD: cwd, PluginSkillPaths: pluginSkillPaths})
+	skill.Initialize(skill.Options{CWD: cwd, PluginSkillPaths: pluginSkillPaths, SkillDirs: setting.Default().Snapshot().SkillDirs})
 	persona.Initialize(cwd)
 	command.Initialize(command.Options{
 		CWD:                cwd,
@@ -123,7 +123,7 @@ func (m *model) reloadProjectServices(cwd string) {
 	m.services.Setting = setting.Default()
 	m.learnedStores.Update(cwd, m.services.Setting)
 
-	skill.Initialize(skill.Options{CWD: cwd, PluginSkillPaths: pluginSkillPaths})
+	skill.Initialize(skill.Options{CWD: cwd, PluginSkillPaths: pluginSkillPaths, SkillDirs: m.services.Setting.Snapshot().SkillDirs})
 	m.services.Skill = skill.Default()
 
 	command.Initialize(command.Options{

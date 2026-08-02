@@ -15,6 +15,7 @@ func mergeSettings(base, overlay *Data) *Data {
 	result := NewData()
 	result.Permissions = mergePermissions(base.Permissions, overlay.Permissions)
 	result.Model = coalesce(overlay.Model, base.Model)
+	result.TokenLimit = coalesceInt(overlay.TokenLimit, base.TokenLimit)
 	result.Theme = coalesce(overlay.Theme, base.Theme)
 	result.Hooks = mergeHooks(base.Hooks, overlay.Hooks)
 	result.Env = mergeMaps(base.Env, overlay.Env)
@@ -26,7 +27,9 @@ func mergeSettings(base, overlay *Data) *Data {
 	result.Persona = coalesce(overlay.Persona, base.Persona)
 	result.SelfLearn = mergeSelfLearn(base.SelfLearn, overlay.SelfLearn)
 	result.AutoPilot = mergeAutoPilot(base.AutoPilot, overlay.AutoPilot)
+	result.SubagentModels = mergeMaps(base.SubagentModels, overlay.SubagentModels)
 	result.LastOperationMode = coalesce(overlay.LastOperationMode, base.LastOperationMode)
+	result.SkillDirs = mergeStringSlices(base.SkillDirs, overlay.SkillDirs)
 
 	return result
 }

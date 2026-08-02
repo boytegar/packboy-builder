@@ -18,6 +18,11 @@ type loader struct {
 	// by enabled plugins (injected by the app from the plugin registry). nil
 	// in contexts that don't load plugin skills (e.g. persona, tests).
 	pluginSkillPaths func() []PluginSkillPath
+	// extraSkillPaths are skill directories listed in settings.json "skillDirs"
+	// (additive, merged across user and project settings). Each is expanded for
+	// "~" and resolved against cwd. nil/empty in contexts that don't read
+	// settings (e.g. persona, tests).
+	extraSkillPaths []string
 }
 
 // searchPath represents a skill search location with optional namespace.
@@ -67,6 +72,17 @@ func (l *loader) getSearchPaths() []searchPath {
 		path:  filepath.Join(confdir.Dir(homeDir), "skills"),
 		scope: ScopeUser,
 	})
+
+	// 3.5. Extra skill directories from settings.json "skillDirs" (ScopeCustom).
+	// Additive; each later entry in the merged list overrides an earlier one of
+	// the same skill name within the custom tier. Project-level entries were
+	// appended after user-level ones during settings merge, so they win.
+	for _, dir := range l.extraSkillPaths {
+		paths = append(paths, searchPath{
+			path:  dir,
+			scope: ScopeCustom,
+		})
+	}
 
 	// 4. .claude/skills/ (Claude project compat)
 	paths = append(paths, searchPath{

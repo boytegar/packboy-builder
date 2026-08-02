@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/boytegar/packboy-builder/internal/llm"
+	"github.com/boytegar/packboy-builder/internal/setting"
 	"github.com/boytegar/packboy-builder/internal/subagent"
 	"github.com/boytegar/packboy-builder/internal/tool"
 )
@@ -65,6 +66,12 @@ func RunAgent(opts AgentRunOptions) error {
 	// as TUI-spawned subagents.
 	executor := subagent.NewExecutor(provider, cwd, modelID, nil)
 	executor.SetResolver(llm.NewProviderPool(llm.Default().Store()))
+	executor.SetSubagentModelOverride(func(name string) string {
+		if data, err := setting.Load(); err == nil && data != nil {
+			return data.SubagentModels[name]
+		}
+		return ""
+	})
 
 	if opts.Name != "" {
 		fmt.Printf("Agent: %s\n", opts.Name)

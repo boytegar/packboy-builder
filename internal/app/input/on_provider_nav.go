@@ -56,13 +56,28 @@ func (s *ProviderSelector) switchTab(t providerTab) {
 	s.apiKeyActive = false
 	s.closeCustomForm()
 	s.closeOllamaForm()
+	s.subAgentPhase = 0
+	s.subSelected = ""
 	s.rebuildVisibleItems()
 }
 
-func (s *ProviderSelector) NextTab() { s.switchTab((s.activeTab + 1) % 2) }
-func (s *ProviderSelector) PrevTab() { s.switchTab((s.activeTab + 1 + 2) % 2) }
+// providerTabCount reports how many tabs are rendered, so tab cycling wraps
+// correctly whether or not the Subagents tab is available (it is hidden until
+// an agent registry is wired and at least one agent exists).
+func (s *ProviderSelector) providerTabCount() int {
+	if s.subagentsTabActive() {
+		return 3
+	}
+	return 2
+}
+
+func (s *ProviderSelector) NextTab() { s.switchTab(providerTab((int(s.activeTab) + 1) % s.providerTabCount())) }
+func (s *ProviderSelector) PrevTab() { s.switchTab(providerTab((int(s.activeTab) + 1 + s.providerTabCount()) % s.providerTabCount())) }
 
 func (s *ProviderSelector) GoBack() bool {
+	if s.handleSubagentBack() {
+		return true
+	}
 	if s.customFormActive {
 		s.closeCustomForm()
 		return true
@@ -190,6 +205,12 @@ func (s *ProviderSelector) HandleKeypress(key tea.KeyMsg) tea.Cmd {
 	case "ctrl+d":
 		return s.handleCredentialRemove()
 
+	case "i":
+		if cmd := s.handleSubagentInheritKey(); cmd != nil {
+			return cmd
+		}
+		// Not on the Subagents tab phase 1: fall through to typed-text capture.
+
 	default:
 		// Typed text capture: every printable rune is search input. Navigation
 		// is arrows + ctrl+p/ctrl+n; tabs are tab/shift+tab and left/right — no
@@ -221,6 +242,10 @@ func (s *ProviderSelector) Select() tea.Cmd {
 	}
 
 	item := s.visibleItems[s.selectedIdx]
+	switch s.activeTab {
+	case providerTabSubagents:
+		return s.handleSubagentSelect()
+	}
 	switch item.Kind {
 	case providerItemModel:
 		return s.selectModel(item.Model)

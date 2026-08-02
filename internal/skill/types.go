@@ -52,6 +52,14 @@ const (
 	// ScopeUser is ~/.pcb/skills/ (Packboy Builder user level)
 	ScopeUser
 
+	// ScopeCustom is an extra skill directory listed in settings.json
+	// "skillDirs". Sits above user-level (so a project-level skill dir can
+	// override a user skill by the same name) and below project-level (so
+	// .pcb/skills and project plugins still win). Merged as a deduplicated
+	// union across user and project settings; each entry's priority within
+	// the custom tier is its index in the merged list — later entries win.
+	ScopeCustom
+
 	// ScopeClaudeProject is .claude/skills/ (Claude project compatibility)
 	ScopeClaudeProject
 
@@ -77,6 +85,8 @@ func (s SkillScope) String() string {
 		return "user-plugin"
 	case ScopeUser:
 		return "user"
+	case ScopeCustom:
+		return "custom"
 	case ScopeClaudeProject:
 		return "claude-project"
 	case ScopeProjectPlugin:

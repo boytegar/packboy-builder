@@ -9,7 +9,12 @@
 // hold *Registry as an opaque handle and call its methods.
 package skill
 
-import "sync"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+)
 
 // PluginSkillPath describes a skill directory provided by a plugin.
 type PluginSkillPath struct {
@@ -22,6 +27,12 @@ type PluginSkillPath struct {
 type Options struct {
 	CWD              string
 	PluginSkillPaths func() []PluginSkillPath // injected plugin callback
+	// SkillDirs are extra skill directories from settings.json "skillDirs".
+	// Each is expanded for a leading "~" and resolved against CWD when
+	// relative. Empty entries and duplicates are dropped. nil/empty is a
+	// no-op — the builtin, ~/.pcb/skills, .pcb/skills, plugin, and Claude
+	// compat directories are still scanned.
+	SkillDirs []string
 }
 
 // Initialize loads skills from all sources, applies persisted states,
@@ -30,6 +41,7 @@ func Initialize(opts Options) {
 	cwd := opts.CWD
 	loader := newLoader(cwd)
 	loader.pluginSkillPaths = opts.PluginSkillPaths
+	loader.extraSkillPaths = resolveSkillDirs(opts.SkillDirs, cwd)
 
 	skills, _ := loader.loadAll()
 	userStore, _ := NewUserStore()
@@ -107,4 +119,50 @@ func setDefaultRegistry(r *Registry) {
 
 func newEmptyRegistry() *Registry {
 	return &Registry{skills: make(map[string]*Skill)}
+}
+
+// resolveSkillDirs expands each settings.json "skillDirs" entry: a leading
+// "~/" (or bare "~") expands to the user's home, a relative path resolves
+// against cwd, and an absolute path is kept as-is. Empty entries, duplicates,
+// and the empty string are dropped. nil/empty input returns nil.
+func resolveSkillDirs(dirs []string, cwd string) []string {
+	if len(dirs) == 0 {
+		return nil
+	}
+	homeDir, _ := os.UserHomeDir()
+	seen := make(map[string]bool, len(dirs))
+	var out []string
+	for _, d := range dirs {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		expanded := expandHome(d, homeDir)
+		resolved := expanded
+		if !filepath.IsAbs(expanded) && cwd != "" {
+			resolved = filepath.Join(cwd, expanded)
+		}
+		resolved = filepath.Clean(resolved)
+		if seen[resolved] {
+			continue
+		}
+		seen[resolved] = true
+		out = append(out, resolved)
+	}
+	return out
+}
+
+// expandHome replaces a leading "~" with homeDir. Returns the input unchanged
+// when it has no home prefix or homeDir is empty.
+func expandHome(p, homeDir string) string {
+	if homeDir == "" {
+		return p
+	}
+	if p == "~" {
+		return homeDir
+	}
+	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, "~\\") {
+		return filepath.Join(homeDir, p[2:])
+	}
+	return p
 }

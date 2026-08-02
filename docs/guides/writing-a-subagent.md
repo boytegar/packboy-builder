@@ -78,6 +78,22 @@ The vendor names the model family, not its hosting platform: Claude on Vertex
 is still `anthropic/…`. If unavailable, Packboy Builder uses the parent's provider and
 model.
 
+### Overriding the model from `/models`
+
+The `/models` overlay has a **Subagents** tab that picks a model from the live
+fetched catalog and saves it to `settings.json` under `subagentModels` — no
+`.md` edit required. The override beats the frontmatter for the named agent,
+and the resolution priority (highest first) is:
+
+1. `Agent` tool call `model` field (per-invocation runtime override)
+2. `settings.json` → `subagentModels["<agent-name>"]`
+3. `AGENT.md` frontmatter `model:`
+4. the parent conversation's model (`inherit`)
+
+In the tab, `Enter` saves the picked model; `i` clears the override (the agent
+inherits the frontmatter or parent again); `←` returns to the agent list. The
+override accepts the same forms as the frontmatter field.
+
 The foreground agent selects an agent by `description` / `when-to-use`; that
 also selects its model.
 

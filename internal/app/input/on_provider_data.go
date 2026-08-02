@@ -26,6 +26,8 @@ func (s *ProviderSelector) Enter(ctx context.Context, width, height int) (tea.Cm
 	s.closeOllamaForm()
 	s.active = true
 	s.activeTab = providerTabModels
+	s.subAgentPhase = 0
+	s.subSelected = ""
 	s.width = width
 	s.height = height
 
@@ -263,6 +265,8 @@ func (s *ProviderSelector) rebuildVisibleItems() {
 		s.rebuildModelsTab()
 	case providerTabProviders:
 		s.rebuildProvidersTab()
+	case providerTabSubagents:
+		s.rebuildSubagentsTab()
 	}
 
 	s.clampSelection()
@@ -430,6 +434,8 @@ func (s *ProviderSelector) Cancel() {
 	s.apiKeyActive = false
 	s.closeCustomForm()
 	s.closeOllamaForm()
+	s.subAgentPhase = 0
+	s.subSelected = ""
 	s.store = nil
 	s.resetNavigation()
 	s.resetModelSearch()

@@ -674,6 +674,12 @@ func (m *model) ReconfigureAgentTool() {
 
 	executor := subagent.NewExecutor(m.env.LLMProvider, m.env.CWD, m.env.GetModelID(), m.services.Hook)
 	executor.SetResolver(llm.NewProviderPool(m.services.LLM.Store()))
+	executor.SetSubagentModelOverride(func(name string) string {
+		if s := m.services.Setting; s != nil {
+			return s.Snapshot().SubagentModels[name]
+		}
+		return ""
+	})
 	if m.services.Session.GetStore() != nil && m.services.Session.ID() != "" {
 		executor.SetSessionStore(m.services.Session.GetStore(), m.services.Session.ID())
 	}

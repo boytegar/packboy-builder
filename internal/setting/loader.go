@@ -311,6 +311,27 @@ func UpdateLastOperationMode(mode OperationMode) error {
 	return updateSettingsFile(true, func(d *Data) { d.LastOperationMode = mode.PersistenceName() })
 }
 
+// UpdateSubagentModelAt sets or clears a per-subagent model override at the
+// requested settings level. model accepts the same forms as the AGENT.md
+// frontmatter "model" field: "inherit" or "" clears the override (the
+// frontmatter takes over again); an alias, a bare model id, or
+// "vendor/model" sets it. The block replaces the whole subagentModels map for
+// the level (cross-level layering still merges per-key on Load).
+func UpdateSubagentModelAt(name, model string, userLevel bool) error {
+	return updateSettingsFile(userLevel, func(d *Data) {
+		if model == "" || model == "inherit" {
+			if d.SubagentModels != nil {
+				delete(d.SubagentModels, name)
+			}
+			return
+		}
+		if d.SubagentModels == nil {
+			d.SubagentModels = make(map[string]string)
+		}
+		d.SubagentModels[name] = model
+	})
+}
+
 // AutoPilotPresetDir is the folder where /autopilot Export saves named configs
 // and Import reads them — a shared, non-session space for reusable presets.
 func AutoPilotPresetDir() string {

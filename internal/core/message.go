@@ -424,7 +424,7 @@ func LastAssistantChatContent(msgs []ChatMessage) string {
 // the conversation is auto-compacted. The status bar's critical tier derives
 // from this constant so the bar turns critical exactly when compaction is due —
 // two separate literals would let the display and the trigger drift apart.
-const AutoCompactThresholdPercent = 90
+const AutoCompactThresholdPercent = 95
 
 // NeedsCompaction reports whether the prompt has reached
 // AutoCompactThresholdPercent of the model's input limit. promptTokens must be

@@ -35,6 +35,10 @@ func (s *ProviderSelector) Render() string {
 	sb.WriteString("\n\n")
 
 	var body strings.Builder
+	if s.activeTab == providerTabSubagents && s.subAgentPhase == 1 {
+		body.WriteString(s.subagentPhaseLabel())
+		body.WriteString("\n\n")
+	}
 	if len(s.visibleItems) == 0 {
 		body.WriteString(s.emptyFilterMsg())
 		body.WriteString("\n")
@@ -61,6 +65,12 @@ func (s *ProviderSelector) emptyFilterMsg() string {
 	if s.activeTab == providerTabModels {
 		return kit.DimStyle().PaddingLeft(2).Render("No models match the filter")
 	}
+	if s.activeTab == providerTabSubagents {
+		if s.subAgentPhase == 1 {
+			return kit.DimStyle().PaddingLeft(2).Render("No models match the filter")
+		}
+		return kit.DimStyle().PaddingLeft(2).Render("No subagents match the filter")
+	}
 	return kit.DimStyle().PaddingLeft(2).Render("No providers match the filter")
 }
 
@@ -86,6 +96,8 @@ func (s *ProviderSelector) renderItemList(sb *strings.Builder) {
 			sb.WriteString(s.renderProviderRow(item, isSelected, i))
 		case providerItemAuthMethod:
 			sb.WriteString(s.renderAuthMethod(item, isSelected, i))
+		case providerItemSubagent:
+			sb.WriteString(s.renderSubagentRow(item, isSelected))
 		}
 		sb.WriteString("\n")
 
@@ -138,6 +150,12 @@ func (s *ProviderSelector) renderTabs() string {
 		{"Models", providerTabModels},
 		{"Providers", providerTabProviders},
 	}
+	if s.subagentsTabActive() {
+		tabs = append(tabs, struct {
+			name string
+			tab  providerTab
+		}{"Subagents", providerTabSubagents})
+	}
 
 	var parts []string
 	for _, t := range tabs {
@@ -161,12 +179,23 @@ func (s *ProviderSelector) renderSearchBox() string {
 		totalModels := len(s.allModels)
 		filteredCount := len(s.filteredModels)
 		text = fmt.Sprintf(" %s▏ (%d/%d)", s.searchQuery, filteredCount, totalModels)
+	} else if s.activeTab == providerTabSubagents && s.subAgentPhase == 1 && s.searchQuery != "" {
+		totalModels := len(s.allModels)
+		filteredCount := len(s.filteredModels)
+		text = fmt.Sprintf(" %s▏ (%d/%d)", s.searchQuery, filteredCount, totalModels)
 	} else if s.searchQuery != "" {
 		text = " " + s.searchQuery + "▏"
 	} else {
-		if s.activeTab == providerTabProviders {
+		switch s.activeTab {
+		case providerTabProviders:
 			text = " Type to filter providers..."
-		} else {
+		case providerTabSubagents:
+			if s.subAgentPhase == 1 {
+				text = " Type to filter models..."
+			} else {
+				text = " Type to filter subagents..."
+			}
+		default:
 			text = " Type to filter models..."
 		}
 	}
@@ -394,9 +423,16 @@ func (s *ProviderSelector) renderHints() string {
 
 	var parts []string
 	parts = append(parts, "↑/↓ navigate")
-	if s.activeTab == providerTabProviders {
+	switch s.activeTab {
+	case providerTabProviders:
 		parts = append(parts, "Ctrl+E edit", "Ctrl+D remove", "Enter connect/refresh")
-	} else {
+	case providerTabSubagents:
+		if s.subAgentPhase == 1 {
+			parts = append(parts, "Enter save override", "i inherit", "← back")
+		} else {
+			parts = append(parts, "Enter pick model")
+		}
+	default:
 		parts = append(parts, "Space mark · Enter confirm")
 	}
 	parts = append(parts, "←/→/Tab switch", "Esc cancel")

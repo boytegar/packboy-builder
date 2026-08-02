@@ -51,6 +51,12 @@ type Executor struct {
 	mcpServers                 mcp.Servers          // connect/disconnect for per-subagent server sets
 	disabledToolsMu            sync.RWMutex
 	disabledTools              map[string]bool // effective global disabled tools, copied on set/read
+
+	// subagentModelOverride resolves a per-subagent model override from
+	// settings.json (set via the /models Subagents tab). It returns the
+	// override string for the agent name, or "" when no override is set so
+	// resolution falls back to the frontmatter. nil = overrides not wired.
+	subagentModelOverride func(agentName string) string
 }
 
 type SubagentSessionStore interface {
@@ -135,6 +141,14 @@ func (e *Executor) SetModelStore(store *llm.Store, provider llm.Name, authMethod
 	e.modelStore = store
 	e.parentProviderName = provider
 	e.parentAuthMethod = authMethod
+}
+
+// SetSubagentModelOverride wires the settings.json-backed per-subagent model
+// override lookup (set via the /models Subagents tab). fn returns the override
+// string for an agent name, or "" when no override is set. nil fn clears the
+// override lookup so resolution falls back to the frontmatter.
+func (e *Executor) SetSubagentModelOverride(fn func(agentName string) string) {
+	e.subagentModelOverride = fn
 }
 
 // SetSkillsDirectory provides the skills directory section so subagents
@@ -363,11 +377,10 @@ func (e *Executor) prepareRunConfig(ctx context.Context, req tool.AgentExecReque
 		maxSteps = req.MaxSteps
 	}
 
-	provider, modelID, err := e.resolveModel(ctx, req.Model, config.Model)
+	provider, modelID, err := e.resolveModel(ctx, req.Model, config.Model, config.Name)
 	if err != nil {
 		return nil, err
 	}
-
 	return &runConfig{
 		config:      config,
 		provider:    provider,
@@ -568,15 +581,19 @@ func (e *Executor) fireSubagentStop(req tool.AgentExecRequest, agentHookID, agen
 
 // resolveModel picks the provider and model id for a run, by priority:
 // 1. Explicit request override (req.Model)
-// 2. Agent configuration (config.Model)
-// 3. Parent conversation model ("inherit" or empty)
+// 2. settings.json per-subagent override (subagentModels[agentName])
+// 3. Agent configuration (config.Model, the AGENT.md frontmatter)
+// 4. Parent conversation model ("inherit" or empty)
 //
 // An explicit "vendor/model" override routes to that vendor through the
 // resolver only when a linked provider can be resolved. Otherwise it falls
 // back to the parent conversation. Every other form — an alias, a bare model
 // id, or "inherit" — stays on the parent's provider, preserving prior behavior.
-func (e *Executor) resolveModel(ctx context.Context, requestModel, configModel string) (llm.Provider, string, error) {
+func (e *Executor) resolveModel(ctx context.Context, requestModel, configModel, agentName string) (llm.Provider, string, error) {
 	ref := strings.TrimSpace(requestModel)
+	if ref == "" && e.subagentModelOverride != nil {
+		ref = strings.TrimSpace(e.subagentModelOverride(agentName))
+	}
 	if ref == "" {
 		ref = strings.TrimSpace(configModel)
 	}

@@ -132,6 +132,20 @@ func (s *Settings) SearchProvider() string {
 	return s.data.SearchProvider
 }
 
+// TokenLimit returns the global context-window override from settings.json, or
+// 0 when unset. A positive value takes the highest priority in
+// llm.Store.EffectiveInputLimit — above the per-model tokenLimits in
+// providers.json and the PCB_INPUT_LIMIT env var — so the agent's
+// auto-compaction trigger and the status bar share one global window.
+func (s *Settings) TokenLimit() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.data == nil {
+		return 0
+	}
+	return s.data.TokenLimit
+}
+
 func (s *Settings) SetSearchProvider(provider string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

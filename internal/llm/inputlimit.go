@@ -3,6 +3,8 @@ package llm
 import (
 	"os"
 	"strconv"
+
+	"github.com/boytegar/packboy-builder/internal/setting"
 )
 
 // The context window is the denominator of every "how full is the context"
@@ -36,7 +38,8 @@ func inputLimitOverride() int {
 // "unknown" and skip whatever they would have done with a window rather than
 // substituting a guess.
 //
-// Order: the env override, then the user's configured limit, then this
+// Order: the settings.json tokenLimit (a global override — highest priority),
+// then the env override, then the user's configured per-model limit, then this
 // provider+auth's cached figure, then the largest figure cached for the ID
 // under any provider (an aggregator may serve a model without publishing its
 // window while the native provider knows it).
@@ -44,6 +47,13 @@ func inputLimitOverride() int {
 // auth disambiguates a model ID cached under several auth methods with
 // different windows (gpt-5.5: 400k via the API, 272k via a subscription).
 func (s *Store) EffectiveInputLimit(provider Name, auth AuthMethod, modelID string) int {
+	// The settings.json tokenLimit override wins over everything — per-model
+	// limits, the model cache, and the env var — so a single value shapes the
+	// auto-compaction trigger and the status bar for every model. setting.Default
+	// is nil-receiver safe (returns 0) before settings are initialized.
+	if n := setting.Default().TokenLimit(); n > 0 {
+		return n
+	}
 	if n := inputLimitOverride(); n > 0 {
 		return n
 	}

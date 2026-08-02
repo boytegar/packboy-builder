@@ -379,3 +379,134 @@ Review instructions.
 		t.Errorf("Namespace = %s, want 'code' (explicit frontmatter)", skill.Namespace)
 	}
 }
+
+// writeSkillHelper creates a SKILL.md with the given name under dir.
+func writeSkillHelper(t *testing.T, dir, name string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := "---\nname: " + name + "\ndescription: " + name + " skill\n---\n\nInstructions.\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExtraSkillDirsLoaded(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Extra skill dir from settings.json "skillDirs"
+	extra := filepath.Join(tmpDir, "team-skills", "planning")
+	writeSkillHelper(t, extra, "planning")
+
+	loader := &loader{
+		cwd:             tmpDir,
+		extraSkillPaths: []string{filepath.Join(tmpDir, "team-skills")},
+	}
+
+	skills, err := loader.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll failed: %v", err)
+	}
+	sk, ok := skills["planning"]
+	if !ok {
+		t.Fatal("planning skill from extraSkillPaths not loaded")
+	}
+	if sk.Scope != ScopeCustom {
+		t.Errorf("Scope = %s, want ScopeCustom", sk.Scope.String())
+	}
+}
+
+func TestExtraSkillDirOverridesUserScope(t *testing.T) {
+	// An extra (ScopeCustom) skill should override a ~/.pcb/skills (ScopeUser)
+	// skill of the same name, since ScopeCustom > ScopeUser.
+	tmpDir := t.TempDir()
+
+	// User-level skill via confdir under home — build the path the loader uses.
+	homeDir, _ := os.UserHomeDir()
+	if homeDir == "" {
+		t.Skip("no home dir")
+	}
+	userSkillDir := filepath.Join(homeDir, ".pcb", "skills", "shared")
+	// Best-effort: only write if writable; skip otherwise.
+	if err := os.MkdirAll(userSkillDir, 0o755); err != nil {
+		t.Skipf("cannot create user skill dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(filepath.Join(homeDir, ".pcb", "skills", "shared")) })
+	writeSkillHelper(t, userSkillDir, "shared")
+
+	// Extra dir with a same-named skill that should win.
+	extraRoot := filepath.Join(tmpDir, "team-skills")
+	writeSkillHelper(t, filepath.Join(extraRoot, "shared"), "shared")
+
+	loader := &loader{
+		cwd:             tmpDir,
+		extraSkillPaths: []string{extraRoot},
+	}
+	skills, _ := loader.loadAll()
+	sk, ok := skills["shared"]
+	if !ok {
+		t.Fatal("shared skill not found")
+	}
+	if sk.Scope != ScopeCustom {
+		t.Errorf("Scope = %s, want ScopeCustom (extra should override user)", sk.Scope.String())
+	}
+}
+
+func TestExtraSkillDirYieldsToProjectScope(t *testing.T) {
+	// A .pcb/skills (ScopeProject) skill should override an extra (ScopeCustom)
+	// skill of the same name, since ScopeProject > ScopeCustom.
+	tmpDir := t.TempDir()
+
+	extraRoot := filepath.Join(tmpDir, "team-skills")
+	writeSkillHelper(t, filepath.Join(extraRoot, "alpha"), "alpha")
+
+	projSkillDir := filepath.Join(tmpDir, ".pcb", "skills", "alpha")
+	writeSkillHelper(t, projSkillDir, "alpha")
+
+	loader := &loader{
+		cwd:             tmpDir,
+		extraSkillPaths: []string{extraRoot},
+	}
+	skills, _ := loader.loadAll()
+	sk, ok := skills["alpha"]
+	if !ok {
+		t.Fatal("alpha skill not found")
+	}
+	if sk.Scope != ScopeProject {
+		t.Errorf("Scope = %s, want ScopeProject (project should override extra)", sk.Scope.String())
+	}
+}
+
+func TestResolveSkillDirs(t *testing.T) {
+	homeDir, _ := os.UserHomeDir()
+	cwd := "/work/proj"
+
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"empty", nil, nil},
+		{"blanks dropped", []string{"", "  ", "/abs"}, []string{"/abs"}},
+		{"absolute passthrough", []string{"/mnt/shared/skills"}, []string{"/mnt/shared/skills"}},
+		{"relative joined to cwd", []string{"./skills"}, []string{"/work/proj/skills"}},
+		{"tilde expands to home", []string{"~/team-skills"}, []string{filepath.Join(homeDir, "team-skills")}},
+		{"bare tilde expands to home", []string{"~"}, []string{homeDir}},
+		{"dedup", []string{"/a", "/a", "/b"}, []string{"/a", "/b"}},
+		{"whitespace trimmed", []string{"  /x  "}, []string{"/x"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolveSkillDirs(tc.in, cwd)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len = %d, want %d (got %v)", len(got), len(tc.want), got)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("[%d] = %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}

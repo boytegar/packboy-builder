@@ -54,6 +54,15 @@ type Data struct {
 	// "unset"; nil (unset) means off — the bar is opt-in. The numeric
 	// "ctx X/Y" label is unaffected and always shows.
 	ContextBar *bool `json:"contextBar,omitempty"`
+	// TokenLimit is a global override for the model's context window (input
+	// token limit), in tokens. When set to a positive integer it takes the
+	// highest priority — above the per-model tokenLimits in providers.json and
+	// the PCB_INPUT_LIMIT env var — so every model in every provider resolves
+	// to this window. The agent's auto-compaction trigger and the status bar's
+	// context percentage both read it through llm.Store.EffectiveInputLimit.
+	// 0 (absent) means no override; the limit resolves from providers.json /
+	// the model cache / the env var as usual.
+	TokenLimit int `json:"tokenLimit,omitempty"`
 	// Persona selects an active persona directory under ~/.pcb/personas/<name>/
 	// or .pcb/personas/<name>/. Empty = no persona override. The persona's own
 	// settings.json is applied as the highest config overlay (see
@@ -66,8 +75,24 @@ type Data struct {
 	// steers, how it drives (model + system prompt), and the mission it steers
 	// toward (JSON key "autoPilot").
 	AutoPilot AutoPilotSettings `json:"autoPilot,omitempty"`
+	// SubagentModels maps a subagent name to a model override, picked via the
+	// /models Subagents tab and persisted to settings.json. The value uses the
+	// same forms as the AGENT.md frontmatter "model" field: "inherit" or empty
+	// means no override (fall back to the frontmatter); an alias ("opus",
+	// "sonnet", "haiku") or a bare model id stays on the parent's provider;
+	// "vendor/model" routes to another connected provider. Resolution priority:
+	// Agent tool call override → this settings entry → frontmatter → parent.
+	SubagentModels map[string]string `json:"subagentModels,omitempty"`
 	// LastOperationMode is the user-wide mode restored when starting a new session.
 	LastOperationMode string `json:"lastOperationMode,omitempty"`
+	// SkillDirs lists extra directories to scan for skills (SKILL.md files).
+	// Entries are absolute paths or leading "~" (expanded to the user's home).
+	// Additive: the builtin, ~/.pcb/skills, .pcb/skills, plugin, and Claude-compat
+	// directories are still scanned; skills listed here load at ScopeCustom
+	// priority (above user-level, below project-level). Merged across user and
+	// project settings as a deduplicated union, so a project can extend but not
+	// remove a user-level skill dir.
+	SkillDirs []string `json:"skillDirs,omitempty"`
 }
 
 // AutoPilotSettings tunes the autopilot copilot. Every field is optional;
@@ -731,6 +756,7 @@ func (s *Data) Clone() *Data {
 	dst.Permissions.Deny = append([]string(nil), s.Permissions.Deny...)
 	dst.Permissions.Ask = append([]string(nil), s.Permissions.Ask...)
 	dst.Model = s.Model
+	dst.TokenLimit = s.TokenLimit
 	dst.Theme = s.Theme
 	dst.SearchProvider = s.SearchProvider
 	dst.StreamFirstChunkTimeout = s.StreamFirstChunkTimeout
@@ -740,6 +766,15 @@ func (s *Data) Clone() *Data {
 	dst.SelfLearn = s.SelfLearn // value-typed; shallow copy is correct
 	dst.AutoPilot = s.AutoPilot.Clone()
 	dst.LastOperationMode = s.LastOperationMode
+	if s.SkillDirs != nil {
+		dst.SkillDirs = append([]string(nil), s.SkillDirs...)
+	}
+	if s.SubagentModels != nil {
+		dst.SubagentModels = make(map[string]string, len(s.SubagentModels))
+		for k, v := range s.SubagentModels {
+			dst.SubagentModels[k] = v
+		}
+	}
 	if s.AllowBypass != nil {
 		v := *s.AllowBypass
 		dst.AllowBypass = &v

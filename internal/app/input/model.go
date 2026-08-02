@@ -123,6 +123,14 @@ type SelectorDeps struct {
 	Evolve EvolveDeps
 }
 
+// newProviderSelectorWithAgents builds a ProviderSelector and wires the
+// subagent registry + settings the Subagents tab needs.
+func newProviderSelectorWithAgents(deps SelectorDeps) ProviderSelector {
+	ps := NewProviderSelector()
+	ps.SetAgentRegistry(deps.AgentRegistry, deps.Setting)
+	return ps
+}
+
 func New(cwd string, width int, matchFunc suggest.Matcher, deps SelectorDeps) Model {
 	suggestions := suggest.NewState(matchFunc)
 	suggestions.SetCwd(cwd)
@@ -142,7 +150,7 @@ func New(cwd string, width int, matchFunc suggest.Matcher, deps SelectorDeps) Mo
 		Memory:    MemoryState{Selector: NewMemorySelector()},
 		MCP:       MCPState{Selector: NewMCPSelector(deps.MCPRegistry)},
 		Plugin:    NewPluginSelector(deps.PluginRegistry),
-		Provider:  ProviderState{Selector: NewProviderSelector()},
+		Provider:  ProviderState{Selector: newProviderSelectorWithAgents(deps)},
 		Tool:      NewToolSelector(deps.LoadDisabled, deps.UpdateDisabled),
 		Config:    NewConfigSelector(deps.Setting),
 		Autopilot: NewAutopilotSelector(),

@@ -66,6 +66,9 @@ func (r *Registry) InitStores(cwd string) error
 
 // Executor construction (package-level free function)
 func NewExecutor(provider llm.Provider, cwd, parentModelID string, hooks hook.Handler) *Executor
+func (e *Executor) SetResolver(r ProviderResolver)
+func (e *Executor) SetModelStore(store *llm.Store, provider llm.Name, auth llm.AuthMethod)
+func (e *Executor) SetSubagentModelOverride(fn func(agentName string) string)
 
 // Package-level access
 func Initialize(opts Options) error

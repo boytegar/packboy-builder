@@ -13,10 +13,15 @@ and [`concepts/extension-model.md`](../concepts/extension-model.md).
 |---|---|---|
 | Project | `<project>/.pcb/skills/<name>/SKILL.md` | Skill tied to this project (lives in the repo). |
 | User | `~/.pcb/skills/<name>/SKILL.md` | Personal skill shared across projects. |
+| Custom | Any dir listed in `settings.json` `"skillDirs"` | Skills in a shared/team folder outside the standard locations. |
 | Claude-compat | `<project>/.claude/skills/<name>/SKILL.md` or `~/.claude/skills/<name>/SKILL.md` | If you also use Claude Code. |
 
-Project scope wins over user; user wins over Claude-compat. The directory
-name is the skill name.
+Project scope wins over custom; custom wins over user; user wins over
+Claude-compat. The directory name is the skill name. Custom dirs are additive
+— the standard scopes are still scanned — and each entry is `~`-expanded and
+resolved against the project cwd. See
+[`packages/skill.md`](../packages/2-feature/skill.md#configuration) for the
+`skillDirs` merge rules.
 
 ## Minimal Example
 

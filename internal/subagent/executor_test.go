@@ -91,16 +91,42 @@ func TestResolveModelUsesConfigBeforeParent(t *testing.T) {
 	executor := &Executor{parentModelID: "parent-model"}
 	ctx := context.Background()
 
-	if _, got, _ := executor.resolveModel(ctx, "", ""); got != "parent-model" {
+	if _, got, _ := executor.resolveModel(ctx, "", "", ""); got != "parent-model" {
 		t.Fatalf("empty config model = %q, want parent", got)
 	}
-	if _, got, _ := executor.resolveModel(ctx, "", "sonnet"); got != "claude-sonnet-4-6" {
+	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", ""); got != "claude-sonnet-4-6" {
 		t.Fatalf("config model = %q, want sonnet alias", got)
 	}
-	if _, got, _ := executor.resolveModel(ctx, "", "inherit"); got != "parent-model" {
+	if _, got, _ := executor.resolveModel(ctx, "", "inherit", ""); got != "parent-model" {
 		t.Fatalf("inherit model = %q, want parent", got)
 	}
-	if _, got, _ := executor.resolveModel(ctx, "override-model", "sonnet"); got != "override-model" {
+	if _, got, _ := executor.resolveModel(ctx, "override-model", "sonnet", ""); got != "override-model" {
+		t.Fatalf("request override = %q, want override", got)
+	}
+}
+
+func TestResolveModelSettingsOverrideBeatsConfig(t *testing.T) {
+	executor := &Executor{
+		parentModelID: "parent-model",
+		subagentModelOverride: func(name string) string {
+			if name == "coder" {
+				return "haiku"
+			}
+			return ""
+		},
+	}
+	ctx := context.Background()
+
+	// Override wins over frontmatter config.
+	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "coder"); got != "claude-haiku-4-5" {
+		t.Fatalf("settings override = %q, want haiku", got)
+	}
+	// No override for this agent → frontmatter wins.
+	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "other"); got != "claude-sonnet-4-6" {
+		t.Fatalf("no override = %q, want sonnet from frontmatter", got)
+	}
+	// Request override still wins over settings.
+	if _, got, _ := executor.resolveModel(ctx, "override-model", "sonnet", "coder"); got != "override-model" {
 		t.Fatalf("request override = %q, want override", got)
 	}
 }
@@ -127,7 +153,7 @@ func TestResolveModelRoutesQualifiedRefToResolver(t *testing.T) {
 	stub := &stubResolver{provider: stubProvider{}}
 	executor := &Executor{parentModelID: "parent-model", resolver: stub}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "", "")
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -142,7 +168,7 @@ func TestResolveModelRoutesQualifiedRefToResolver(t *testing.T) {
 func TestResolveModelQualifiedRefWithoutResolverInheritsParent(t *testing.T) {
 	executor := &Executor{parentModelID: "parent-model"} // no resolver wired
 
-	provider, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "")
+	provider, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "", "")
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -155,7 +181,7 @@ func TestResolveModelResolverErrorInheritsParent(t *testing.T) {
 	stub := &stubResolver{err: errors.New("provider \"deepseek\" is not connected")}
 	executor := &Executor{parentModelID: "parent-model", resolver: stub}
 
-	provider, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "")
+	provider, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "", "")
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -186,7 +212,7 @@ func TestResolveModelUnavailableOverrideInheritsParent(t *testing.T) {
 		parentModelID:      "gpt-5.6-sol",
 	}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "", "")
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -205,7 +231,7 @@ func TestResolveModelUnavailableParentProviderQualifiedOverrideInheritsParent(t 
 		parentModelID:      "gpt-5.6-sol",
 	}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "openai/nonexistent-model", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "openai/nonexistent-model", "", "")
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -223,7 +249,7 @@ func TestResolveModelEmptyCachedCatalogInheritsParent(t *testing.T) {
 		parentModelID:      "gpt-5.6-sol",
 	}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "", "")
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -244,7 +270,7 @@ func TestResolveModelAvailableOverrideIsPreserved(t *testing.T) {
 		parentModelID:      "gpt-5.6-sol",
 	}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "gpt-5.6-terra", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "gpt-5.6-terra", "", "")
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -256,7 +282,7 @@ func TestResolveModelAvailableOverrideIsPreserved(t *testing.T) {
 func TestResolveModelMissingCatalogLeavesOverrideUnverified(t *testing.T) {
 	executor := &Executor{provider: stubProvider{}, parentModelID: "gpt-5.6-sol"}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "", "")
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}

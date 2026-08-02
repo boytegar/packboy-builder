@@ -18,6 +18,8 @@ import (
 	"github.com/boytegar/packboy-builder/internal/core"
 	"github.com/boytegar/packboy-builder/internal/llm"
 	"github.com/boytegar/packboy-builder/internal/log"
+	coresetting "github.com/boytegar/packboy-builder/internal/setting"
+	"github.com/boytegar/packboy-builder/internal/tool"
 )
 
 // providerTab represents which tab is active in the provider selector.
@@ -26,6 +28,7 @@ type providerTab int
 const (
 	providerTabModels    providerTab = iota // model selection tab
 	providerTabProviders                    // provider management tab
+	providerTabSubagents                    // per-subagent model override
 )
 
 // providerItemKind represents a row type in the visible-items list.
@@ -36,6 +39,7 @@ const (
 	providerItemModel                                  // selectable model row (Models tab)
 	providerItemProvider                               // provider row (Providers tab)
 	providerItemAuthMethod                             // expanded auth-method sub-row (Providers tab)
+	providerItemSubagent                               // selectable subagent row (Subagents tab phase 1)
 )
 
 // providerListItem is a single row in the flattened visible-items list.
@@ -44,6 +48,7 @@ type providerListItem struct {
 	Model       *providerModelItem
 	Provider    *providerProviderItem
 	AuthMethod  *providerAuthMethodItem
+	Subagent    *tool.AgentConfigInfo
 	ProviderIdx int // index into allProviders
 }
 
@@ -162,6 +167,13 @@ type ProviderSelector struct {
 	// spinnerTick advances on each providerConnectingTickMsg; used to pick a braille
 	// frame while a connect/refresh is in flight.
 	spinnerTick int
+
+	// Subagents tab state.
+	agentRegistry AgentRegistry       // nil = Subagents tab unavailable
+	settings      *coresetting.Settings // for reading/writing subagentModels
+	subAgents     []tool.AgentConfigInfo
+	subAgentPhase int    // 0 = pick agent, 1 = pick model
+	subSelected   string // agent name in phase 1; "" = none
 }
 
 // NewProviderSelector creates a new provider selector ProviderSelector.
@@ -172,6 +184,15 @@ func NewProviderSelector() ProviderSelector {
 		maxVisible:          20,
 		expandedProviderIdx: -1,
 	}
+}
+
+// SetAgentRegistry wires the subagent registry + settings handle the Subagents
+// tab needs. Without this the tab is hidden (zero agents). Called from
+// input.New after the selector is constructed so existing tests that build a
+// bare ProviderSelector are unaffected.
+func (s *ProviderSelector) SetAgentRegistry(reg AgentRegistry, settings *coresetting.Settings) {
+	s.agentRegistry = reg
+	s.settings = settings
 }
 
 // IsActive returns whether the selector is active.
@@ -273,6 +294,9 @@ func UpdateProvider(deps OverlayDeps, state *ProviderState, msg tea.Msg) (tea.Cm
 		return cmd, true
 	case providerModelSelectedMsg:
 		return handleProviderModelSelected(deps, state, msg), true
+	case subagentModelSavedMsg:
+		deps.Conv.Append(core.ChatMessage{Role: core.RoleNotice, Content: subagentSavedNotice(msg)})
+		return tea.Batch(deps.CommitMessages()...), true
 	case providerModelsLoadedMsg:
 		state.Selector.HandleModelsLoaded(msg)
 		if deps.ReloadModelStore != nil {

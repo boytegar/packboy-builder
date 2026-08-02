@@ -37,6 +37,31 @@ Token limits are stored in `~/.pcb/providers.json`:
 }
 ```
 
+### Global override in settings.json
+
+A global context-window override can be set in `~/.pcb/settings.json` (or
+`.pcb/settings.json`) via the `tokenLimit` field:
+
+```json
+{
+  "tokenLimit": 200000
+}
+```
+
+When set to a positive integer, `tokenLimit` takes the **highest priority** —
+above the per-model `tokenLimits` in `providers.json` and the `PCB_INPUT_LIMIT`
+env var — so every model in every provider resolves to this window. The agent's
+auto-compaction trigger and the status bar's context percentage both read it
+through `llm.Store.EffectiveInputLimit`. `0` / absent means no override; the
+limit resolves from the other sources as usual.
+
+## Auto-compaction threshold
+
+Auto-compaction fires when the prompt reaches 95% of the model's input limit
+(`core.AutoCompactThresholdPercent`). The status bar's critical tier derives
+from the same constant so the bar turns critical exactly when compaction is
+due. See `internal/core/message.go` (`NeedsCompaction`).
+
 ## Data Sources
 
 | Source | Location | Description |
@@ -120,9 +145,10 @@ func (m *model) getEffectiveInputLimit() int {
 ```
 
 **Priority Order:**
-1. `tokenLimits` (manual or auto-fetched) — **highest priority**
-2. `Model Cache` (from provider API)
-3. Return 0 (no limit known)
+1. `tokenLimit` in `~/.pcb/settings.json` (global override) — **highest priority**
+2. `tokenLimits` (manual or auto-fetched) in `providers.json`
+3. `Model Cache` (from provider API)
+4. Return 0 (no limit known)
 
 ## Provider Differences
 
