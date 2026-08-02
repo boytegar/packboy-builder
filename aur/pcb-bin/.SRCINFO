@@ -1,6 +1,6 @@
 pkgbase = pcb-bin
 	pkgdesc = A fast, open agent harness for the terminal — single Go binary, ~12MB, zero runtime deps
-	pkgver = 1.22.4
+	pkgver = 1.22.5
 	pkgrel = 1
 	url = https://github.com/boytegar/packboy-builder
 	arch = x86_64
@@ -11,9 +11,9 @@ pkgbase = pcb-bin
 	conflicts = pcb-git
 	options = !strip
 	options = !debug
-	source_x86_64 = https://github.com/boytegar/packboy-builder/releases/download/v1.22.4/packboy-builder_linux_amd64.tar.gz
+	source_x86_64 = https://github.com/boytegar/packboy-builder/releases/download/v1.22.5/packboy-builder_linux_amd64.tar.gz
 	sha256sums_x86_64 = 599ba03ab11465fad3442f1600e4aae3de2366fc73b4afd93262ce31ed659b79
-	source_aarch64 = https://github.com/boytegar/packboy-builder/releases/download/v1.22.4/packboy-builder_linux_arm64.tar.gz
+	source_aarch64 = https://github.com/boytegar/packboy-builder/releases/download/v1.22.5/packboy-builder_linux_arm64.tar.gz
 	sha256sums_aarch64 = 2d3d8d520f150a9a23cdd23e24216ddf6d74557c388aab11d595c62779fd7ca9
 
 pkgname = pcb-bin

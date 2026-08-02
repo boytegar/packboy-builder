@@ -1,6 +1,6 @@
 # Maintainer: Boyke Tegar <works@boytegar.xyz>
 pkgname=pcb-bin
-pkgver=1.22.4
+pkgver=1.22.5
 pkgrel=1
 pkgdesc="A fast, open agent harness for the terminal — single Go binary, ~12MB, zero runtime deps"
 arch=('x86_64' 'aarch64')

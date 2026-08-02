@@ -3,7 +3,7 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [v1.22.5] - 2026-08-02
 
 ### Added
 - Add builtin `graph` skill for knowledge graph engineering (ontology, extraction, fusion, GraphRAG) and task graph orchestration (parallel fan-out, verifier separation, stop rule, human gates). Invoke via `/graph {prompt}` or activate in `/skills`.
