@@ -80,7 +80,7 @@ func TestDropEmptyMessagesRemovesTextOnlyEmptyUserMessages(t *testing.T) {
 	}
 }
 
-func TestDropEmptyMessagesDropsThinkingOnlyAssistantMessage(t *testing.T) {
+func TestDropEmptyMessagesKeepsThinkingOnlyAssistantMessage(t *testing.T) {
 	msgs := []core.Message{
 		{Role: core.RoleUser, Content: "hi"},
 		{Role: core.RoleAssistant, Thinking: "pondering..."},
@@ -88,15 +88,18 @@ func TestDropEmptyMessagesDropsThinkingOnlyAssistantMessage(t *testing.T) {
 	}
 
 	filtered := DropEmptyMessages(msgs)
-	if len(filtered) != 2 {
-		t.Fatalf("expected thinking-only assistant message to be dropped, got %d: %#v", len(filtered), filtered)
+	if len(filtered) != 3 {
+		t.Fatalf("expected thinking-only assistant message to be kept, got %d: %#v", len(filtered), filtered)
 	}
-	if filtered[0].Content != "hi" || filtered[1].Content != "are you there?" {
+	if filtered[0].Content != "hi" || filtered[2].Content != "are you there?" {
 		t.Fatalf("unexpected surviving messages: %#v", filtered)
+	}
+	if filtered[1].Thinking != "pondering..." {
+		t.Fatalf("expected thinking to be preserved, got %#v", filtered[1])
 	}
 }
 
-func TestConvertMessagesOmitsThinkingOnlyAssistantToAvoidDeepSeek400(t *testing.T) {
+func TestConvertMessagesSendsThinkingOnlyAssistantWithReasoning(t *testing.T) {
 	msgs := []core.Message{
 		{Role: core.RoleUser, Content: "list files"},
 		{Role: core.RoleAssistant, Thinking: "thinking about it"},
@@ -112,11 +115,32 @@ func TestConvertMessagesOmitsThinkingOnlyAssistantToAvoidDeepSeek400(t *testing.
 	}
 	got := string(raw)
 
-	if strings.Contains(got, `"reasoning_content"`) {
-		t.Fatalf("thinking-only assistant message must be dropped to avoid invalid Chat Completions payload:\n%s", got)
+	if !strings.Contains(got, `"reasoning_content":"thinking about it"`) {
+		t.Fatalf("thinking-only assistant message must carry reasoning_content:\n%s", got)
 	}
-	if strings.Contains(got, `"role":"assistant"`) {
-		t.Fatalf("no assistant message should remain in the payload:\n%s", got)
+	if !strings.Contains(got, `"role":"assistant"`) {
+		t.Fatalf("assistant message should be present with reasoning_content:\n%s", got)
+	}
+}
+
+func TestConvertMessagesOmitsReasoningContentWhenEmpty(t *testing.T) {
+	msgs := []core.Message{
+		{Role: core.RoleUser, Content: "hi"},
+		{Role: core.RoleAssistant, Content: "hello"},
+		{Role: core.RoleUser, Content: "bye"},
+	}
+
+	converted := ConvertMessages(msgs, "", func(msg core.Message) openai.ChatCompletionMessageParamUnion {
+		return AssistantMessageWithReasoning(msg, msg.Thinking)
+	})
+	raw, err := json.Marshal(converted)
+	if err != nil {
+		t.Fatalf("marshal converted messages: %v", err)
+	}
+	got := string(raw)
+
+	if strings.Contains(got, `"reasoning_content"`) {
+		t.Fatalf("reasoning_content should be omitted when empty:\n%s", got)
 	}
 }
 

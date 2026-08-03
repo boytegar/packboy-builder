@@ -96,6 +96,17 @@ func (m *ConversationModel) SetLastThinkingSignature(sig string) {
 	last.ThinkingSignature = sig
 }
 
+func (m *ConversationModel) SetLastReasoning(reasoning []core.ReasoningItem) {
+	if len(reasoning) == 0 || len(m.Messages) == 0 {
+		return
+	}
+	last := &m.Messages[len(m.Messages)-1]
+	if last.Role != core.RoleAssistant {
+		return
+	}
+	last.Reasoning = reasoning
+}
+
 func (m *ConversationModel) AppendErrorToLast(err error) {
 	if len(m.Messages) > 0 {
 		idx := len(m.Messages) - 1

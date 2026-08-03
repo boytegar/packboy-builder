@@ -111,6 +111,13 @@ func (s *State) EnsureToolUseStopReason() {
 	}
 }
 
+// HasContent reports whether the stream has accumulated any text, thinking,
+// or tool calls so far. Used to decide whether to finish gracefully on a
+// mid-stream error (keeping partial output) or to fail (no output to keep).
+func (s *State) HasContent() bool {
+	return s.contentBuf.Len() > 0 || s.thinkingBuf.Len() > 0 || len(s.Response.ToolCalls) > 0
+}
+
 // Fail logs and emits a terminal error chunk.
 func (s *State) Fail(ctx context.Context, ch chan<- llm.StreamChunk, err error) {
 	log.LogError(s.ProviderName, err)

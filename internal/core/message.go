@@ -105,6 +105,7 @@ type ChatMessage struct {
 	DisplayContent    string
 	Thinking          string
 	ThinkingSignature string
+	Reasoning         []ReasoningItem
 	Images            []Image
 	ToolCalls         []ToolCall
 	ToolResult        *ToolResult
@@ -165,6 +166,7 @@ func (c ChatMessage) ToMessage() Message {
 		Images:            c.Images,
 		Thinking:          c.Thinking,
 		ThinkingSignature: c.ThinkingSignature,
+		Reasoning:         c.Reasoning,
 		ToolCalls:         c.ToolCalls,
 	}
 	if c.ToolResult != nil {
@@ -186,6 +188,7 @@ func (m Message) ToChat() ChatMessage {
 		Images:            m.Images,
 		Thinking:          m.Thinking,
 		ThinkingSignature: m.ThinkingSignature,
+		Reasoning:         m.Reasoning,
 		ToolCalls:         m.ToolCalls,
 		ToolResult:        m.ToolResult,
 	}

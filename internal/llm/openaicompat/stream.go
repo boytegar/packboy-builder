@@ -2,6 +2,9 @@ package openaicompat
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"strings"
 
 	"github.com/openai/openai-go/v3"
 
@@ -96,6 +99,20 @@ func StreamChatCompletions(ctx context.Context, cfg ChatStreamConfig) <-chan llm
 		}
 
 		if err := stream.Err(); err != nil {
+			// Follows crush's SSE resilience pattern (client/proto.go): a
+			// malformed/truncated SSE line should not kill a stream that has
+			// already delivered partial content. The openai-go SDK's SSE
+			// parser stores a json.SyntaxError ("unexpected end of JSON
+			// input") in stream.Err() when a data: line is truncated. When
+			// that happens mid-stream, finish with the partial content the
+			// user already received instead of discarding it.
+			if isJSONSyntaxError(err) && state.HasContent() {
+				log.LogError(cfg.ProviderName, err)
+				state.AddToolCallsSorted(toolCalls)
+				state.EnsureToolUseStopReason()
+				state.Finish(ctx, ch)
+				return
+			}
 			state.Fail(ctx, ch, NormalizeAPIError(cfg.ProviderName, err))
 			return
 		}
@@ -106,4 +123,31 @@ func StreamChatCompletions(ctx context.Context, cfg ChatStreamConfig) <-chan llm
 	}()
 
 	return ch
+}
+
+// isJSONSyntaxError reports whether err is a JSON parsing failure such as
+// "unexpected end of JSON input". The openai-go SDK's SSE reader stores this
+// in stream.Err() when a data: line is truncated. We detect it via
+// errors.As against *json.SyntaxError and also by message substring (the
+// SDK may wrap the error in its own type that doesn't satisfy errors.As).
+func isJSONSyntaxError(err error) bool {
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		return true
+	}
+	return err != nil && containsErrorMsg(err, "unexpected end of JSON input")
+}
+
+// containsErrorMsg checks whether err's message contains substr, walking
+// the error chain via errors.Unwrap.
+func containsErrorMsg(err error, substr string) bool {
+	for {
+		if err == nil {
+			return false
+		}
+		if strings.Contains(err.Error(), substr) {
+			return true
+		}
+		err = errors.Unwrap(err)
+	}
 }

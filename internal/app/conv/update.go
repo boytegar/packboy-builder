@@ -240,6 +240,9 @@ func applyPostInfer(rt Runtime, m *Model, ev core.Event) tea.Cmd {
 	if resp.ThinkingSignature != "" {
 		m.SetLastThinkingSignature(resp.ThinkingSignature)
 	}
+	if len(resp.Reasoning) > 0 {
+		m.SetLastReasoning(resp.Reasoning)
+	}
 	if len(resp.ToolCalls) > 0 {
 		m.SetLastToolCalls(resp.ToolCalls)
 		m.Tool.Track(resp.ToolCalls)

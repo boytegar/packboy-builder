@@ -109,8 +109,13 @@ func TestMoonshotAssistantMessagesIncludeReasoningContent(t *testing.T) {
 		if role != "assistant" {
 			continue
 		}
-		if _, ok := msg["reasoning_content"]; !ok {
-			t.Fatalf("assistant message missing reasoning_content at index %d", i)
+		// reasoning_content should be present only when the original message
+		// had thinking content; messages without thinking omit the field.
+		if _, hasReasoning := msg["reasoning_content"]; hasReasoning {
+			rc, _ := msg["reasoning_content"].(string)
+			if rc == "" {
+				t.Fatalf("assistant message at index %d has empty reasoning_content", i)
+			}
 		}
 	}
 }

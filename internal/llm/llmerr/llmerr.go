@@ -6,6 +6,7 @@ package llmerr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -226,6 +227,14 @@ func isNetworkError(err error) bool {
 		return false
 	}
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	// A truncated SSE data: line surfaces as *json.SyntaxError ("unexpected
+	// end of JSON input"). Treat it like a mid-stream cutoff (retryable)
+	// rather than a fatal provider error, mirroring crush's SSE resilience
+	// (crush skips malformed lines; for the SDK path we retry the request).
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
 		return true
 	}
 	var netErr net.Error

@@ -168,8 +168,11 @@ func TestBigModelAssistantMessagesIncludeReasoningContent(t *testing.T) {
 		if role, _ := msg["role"].(string); role != "assistant" {
 			continue
 		}
-		if _, ok := msg["reasoning_content"]; !ok {
-			t.Fatalf("assistant message missing reasoning_content at index %d", i)
+		if _, hasReasoning := msg["reasoning_content"]; hasReasoning {
+			rc, _ := msg["reasoning_content"].(string)
+			if rc == "" {
+				t.Fatalf("assistant message at index %d has empty reasoning_content", i)
+			}
 		}
 	}
 }

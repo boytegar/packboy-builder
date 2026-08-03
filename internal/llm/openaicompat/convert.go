@@ -66,11 +66,18 @@ func DropEmptyMessages(msgs []core.Message) []core.Message {
 }
 
 func messageHasProviderContent(msg core.Message) bool {
-	// Assistant messages must carry content or tool_calls; reasoning_content
-	// alone does not satisfy Chat Completions validation (DeepSeek rejects
-	// with "Invalid assistant message: content or tool_calls must be set").
+	// Assistant messages must carry content, tool_calls, or reasoning to be
+	// valid Chat Completions payloads. An assistant message with only thinking
+	// (no text, no tool calls) is kept so its reasoning_content can be sent —
+	// dropping it would lose the reasoning context and some providers reject the
+	// resulting gap in conversation history. This matches the upstream filter
+	// in crush's preparePrompt (agent.go): skip only when ALL of tool calls,
+	// text content, and reasoning are empty.
 	if msg.Role == core.RoleAssistant {
-		return strings.TrimSpace(msg.Content) != "" || len(msg.ToolCalls) > 0
+		return strings.TrimSpace(msg.Content) != "" ||
+			len(msg.ToolCalls) > 0 ||
+			strings.TrimSpace(msg.Thinking) != "" ||
+			len(msg.Reasoning) > 0
 	}
 	if strings.TrimSpace(msg.Content) != "" {
 		return true
@@ -141,6 +148,9 @@ func convertUserMessage(msg core.Message) openai.ChatCompletionMessageParamUnion
 // DefaultAssistantMessage converts an assistant message without extra fields.
 // Use this for the base OpenAI provider; providers needing reasoning_content
 // should implement their own assistant converter and pass it to ConvertMessages.
+// When the message carries only thinking (no text, no tool calls), the thinking
+// text is used as the content so the provider receives a non-empty assistant
+// message instead of one that would be rejected as empty.
 func DefaultAssistantMessage(msg core.Message) openai.ChatCompletionMessageParamUnion {
 	if len(msg.ToolCalls) > 0 {
 		var asstMsg openai.ChatCompletionAssistantMessageParam
@@ -150,12 +160,18 @@ func DefaultAssistantMessage(msg core.Message) openai.ChatCompletionMessageParam
 		asstMsg.ToolCalls = convertToolCallParams(msg.ToolCalls)
 		return openai.ChatCompletionMessageParamUnion{OfAssistant: &asstMsg}
 	}
-	return openai.AssistantMessage(msg.Content)
+	content := msg.Content
+	if content == "" && msg.Thinking != "" {
+		content = msg.Thinking
+	}
+	return openai.AssistantMessage(content)
 }
 
 // AssistantMessageWithReasoning converts an assistant message and sets
-// reasoning_content as an extra field. Pass empty string to set the field
-// to "" (some providers require this for all assistant messages).
+// reasoning_content as an extra field. When reasoning is non-empty, the
+// provider sees a valid assistant message carrying reasoning content. When
+// reasoning is empty, the field is omitted so the provider does not see
+// reasoning_content="" (which some reject as "empty reasoning content").
 func AssistantMessageWithReasoning(msg core.Message, reasoning string) openai.ChatCompletionMessageParamUnion {
 	var asstMsg openai.ChatCompletionAssistantMessageParam
 	if msg.Content != "" {
@@ -164,7 +180,9 @@ func AssistantMessageWithReasoning(msg core.Message, reasoning string) openai.Ch
 	if len(msg.ToolCalls) > 0 {
 		asstMsg.ToolCalls = convertToolCallParams(msg.ToolCalls)
 	}
-	asstMsg.SetExtraFields(map[string]any{"reasoning_content": reasoning})
+	if reasoning != "" {
+		asstMsg.SetExtraFields(map[string]any{"reasoning_content": reasoning})
+	}
 	return openai.ChatCompletionMessageParamUnion{OfAssistant: &asstMsg}
 }
 

@@ -260,7 +260,7 @@ func RenderModeStatus(params OperationModeParams) string {
 func RenderBypassIndicator() string {
 	style := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Error)
 	hint := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted).Render(" (/yolo)")
-	return style.Render("⚡ bypass on") + hint
+	return "  " + style.Render("⚡ bypass on") + hint
 }
 
 // renderStatusCluster composes the status line's right-hand cluster, in
