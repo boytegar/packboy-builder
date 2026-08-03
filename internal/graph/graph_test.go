@@ -71,9 +71,9 @@ func TestOntologyValidateErrors(t *testing.T) {
 
 	// Relation with undeclared domain.
 	o = &Ontology{
-		Name: "test",
+		Name:        "test",
 		EntityTypes: []EntityType{{Name: "Person"}},
-		Relations: []Relation{{Name: "KNOWS", Domain: "Person", Range: "Ghost"}},
+		Relations:   []Relation{{Name: "KNOWS", Domain: "Person", Range: "Ghost"}},
 	}
 	if err := o.Validate(); err == nil {
 		t.Error("expected error for undeclared range type")
@@ -90,9 +90,9 @@ func TestNodeValidate(t *testing.T) {
 
 	// Valid node.
 	n := &Node{
-		ID:    "p1",
-		Type:  "Person",
-		Label: "Alice",
+		ID:         "p1",
+		Type:       "Person",
+		Label:      "Alice",
 		Attributes: map[string]string{"email": "alice@example.com"},
 		Provenance: Provenance{Source: "test", ExtractedAt: time.Now()},
 	}
@@ -102,9 +102,9 @@ func TestNodeValidate(t *testing.T) {
 
 	// Missing required attribute.
 	n2 := &Node{
-		ID:    "p2",
-		Type:  "Person",
-		Label: "Bob",
+		ID:         "p2",
+		Type:       "Person",
+		Label:      "Bob",
 		Provenance: Provenance{Source: "test", ExtractedAt: time.Now()},
 	}
 	if err := n2.Validate(o); err == nil {
@@ -113,9 +113,9 @@ func TestNodeValidate(t *testing.T) {
 
 	// Missing provenance.
 	n3 := &Node{
-		ID:    "p3",
-		Type:  "Person",
-		Label: "Carol",
+		ID:         "p3",
+		Type:       "Person",
+		Label:      "Carol",
 		Attributes: map[string]string{"email": "c@x.com"},
 	}
 	if err := n3.Validate(o); err == nil {
@@ -137,10 +137,10 @@ func TestEdgeValidate(t *testing.T) {
 
 	// Valid edge.
 	e := &Edge{
-		ID:       "e1",
-		Relation: "WORKS_FOR",
-		Subject:  "p1",
-		Object:   "c1",
+		ID:         "e1",
+		Relation:   "WORKS_FOR",
+		Subject:    "p1",
+		Object:     "c1",
 		Provenance: Provenance{Source: "test", ExtractedAt: time.Now()},
 	}
 	if err := e.Validate(o, "Person", "Company"); err != nil {

@@ -17,11 +17,11 @@ import (
 
 // Sample is a single item in an evaluation sample.
 type Sample struct {
-	ID         string `json:"id"`
-	Predicted  string `json:"predicted"`   // predicted entity type, relation, or label
-	Gold       string `json:"gold"`        // gold-standard answer
-	IsCorrect  bool   `json:"is_correct"`  // human-judged correctness
-	SpanCorrect bool  `json:"span_correct,omitempty"` // for relations: does the source assert the edge?
+	ID          string `json:"id"`
+	Predicted   string `json:"predicted"`              // predicted entity type, relation, or label
+	Gold        string `json:"gold"`                   // gold-standard answer
+	IsCorrect   bool   `json:"is_correct"`             // human-judged correctness
+	SpanCorrect bool   `json:"span_correct,omitempty"` // for relations: does the source assert the edge?
 }
 
 // Metrics holds precision/recall/F1 for a sample.
@@ -130,7 +130,7 @@ type LinkPredictionEval struct {
 	// TrivialBaseline: the score a trivial baseline (e.g. most-popular-node)
 	// would achieve. If the model doesn't beat this, it isn't earning its keep.
 	TrivialBaselineHits float64
-	ModelHitsAtK         float64
+	ModelHitsAtK        float64
 }
 
 // Passes returns true if the model beats the trivial baseline.
@@ -156,8 +156,8 @@ func (e LinkPredictionEval) Summary() string {
 // Gate is the quality gate for stage 7. Target ≥90% precision on a 50-item
 // sample before proceeding to fusion.
 type Gate struct {
-	MinPrecision   float64 // default 0.90
-	MinSampleSize  int     // default 50
+	MinPrecision  float64 // default 0.90
+	MinSampleSize int     // default 50
 }
 
 // DefaultGate returns the standard quality gate: 90% precision on 50 items.

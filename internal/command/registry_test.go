@@ -374,4 +374,3 @@ func TestPluginCommandScope(t *testing.T) {
 		t.Errorf("scope = %d, want %d (scopeProjectPlugin for IsProject=true)", pc.Scope, scopeProjectPlugin)
 	}
 }
-

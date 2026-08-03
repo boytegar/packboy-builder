@@ -54,32 +54,32 @@ func (t *GraphTool) Schema() core.ToolSchema {
 			"type": "object",
 			"properties": map[string]any{
 				"action": map[string]any{
-					"type": "string",
-					"enum": []string{"set_ontology", "add_node", "add_edge", "add_event", "query", "stats", "validate"},
+					"type":        "string",
+					"enum":        []string{"set_ontology", "add_node", "add_edge", "add_event", "query", "stats", "validate"},
 					"description": "The graph operation to perform.",
 				},
 				"ontology": map[string]any{
-					"type": "object",
+					"type":        "object",
 					"description": "Ontology definition (for set_ontology). {name, entity_types:[{name,description?,sub_class_of?,identifies?,attributes:[{name,type,required?}]}], relations:[{name,domain,range,cardinality?,inverse?}]}",
 				},
 				"node": map[string]any{
-					"type": "object",
+					"type":        "object",
 					"description": "Entity node (for add_node). {id,type,label,attributes?,aliases?,source,extracted_at,confidence?}",
 				},
 				"edge": map[string]any{
-					"type": "object",
+					"type":        "object",
 					"description": "Relation edge (for add_edge). {id,relation,subject,object,source,extracted_at,confidence?}",
 				},
 				"event": map[string]any{
-					"type": "object",
+					"type":        "object",
 					"description": "Event node (for add_event). {id,type,trigger,time?,arguments?,source,extracted_at}",
 				},
 				"question": map[string]any{
-					"type": "string",
+					"type":        "string",
 					"description": "Natural-language question (for query). Routed to entity lookup, k-hop traversal, or subgraph extraction.",
 				},
 				"k": map[string]any{
-					"type": "integer",
+					"type":        "integer",
 					"description": "Hop depth for k-hop traversal (default 2).",
 				},
 			},
@@ -234,15 +234,15 @@ func parseNode(raw any) (*kgraph.Node, error) {
 	// Use a flat struct that accepts top-level source/confidence and maps them
 	// into Provenance. This matches how agents call the tool.
 	var flat struct {
-		ID         string            `json:"id"`
-		Type       string            `json:"type"`
-		Label      string            `json:"label"`
-		Attributes map[string]string `json:"attributes,omitempty"`
-		Aliases    []string          `json:"aliases,omitempty"`
-		Source     string            `json:"source"`
-		ExtractedAt time.Time       `json:"extracted_at,omitempty"`
-		Confidence float64          `json:"confidence,omitempty"`
-		Extractor  string           `json:"extractor,omitempty"`
+		ID          string            `json:"id"`
+		Type        string            `json:"type"`
+		Label       string            `json:"label"`
+		Attributes  map[string]string `json:"attributes,omitempty"`
+		Aliases     []string          `json:"aliases,omitempty"`
+		Source      string            `json:"source"`
+		ExtractedAt time.Time         `json:"extracted_at,omitempty"`
+		Confidence  float64           `json:"confidence,omitempty"`
+		Extractor   string            `json:"extractor,omitempty"`
 	}
 	if err := json.Unmarshal(data, &flat); err != nil {
 		return nil, fmt.Errorf("unmarshal node: %w", err)
@@ -272,15 +272,15 @@ func parseEdge(raw any) (*kgraph.Edge, error) {
 		return nil, fmt.Errorf("marshal edge: %w", err)
 	}
 	var flat struct {
-		ID         string            `json:"id"`
-		Relation   string            `json:"relation"`
-		Subject    string            `json:"subject"`
-		Object     string            `json:"object"`
-		Attributes map[string]string `json:"attributes,omitempty"`
-		Source     string            `json:"source"`
-		ExtractedAt time.Time       `json:"extracted_at,omitempty"`
-		Confidence float64          `json:"confidence,omitempty"`
-		Extractor  string           `json:"extractor,omitempty"`
+		ID          string            `json:"id"`
+		Relation    string            `json:"relation"`
+		Subject     string            `json:"subject"`
+		Object      string            `json:"object"`
+		Attributes  map[string]string `json:"attributes,omitempty"`
+		Source      string            `json:"source"`
+		ExtractedAt time.Time         `json:"extracted_at,omitempty"`
+		Confidence  float64           `json:"confidence,omitempty"`
+		Extractor   string            `json:"extractor,omitempty"`
 	}
 	if err := json.Unmarshal(data, &flat); err != nil {
 		return nil, fmt.Errorf("unmarshal edge: %w", err)
@@ -310,16 +310,16 @@ func parseEvent(raw any) (*kgraph.Event, error) {
 		return nil, fmt.Errorf("marshal event: %w", err)
 	}
 	var flat struct {
-		ID         string             `json:"id"`
-		Type       string             `json:"type"`
-		Trigger    string             `json:"trigger"`
-		Time       time.Time          `json:"time,omitempty"`
-		Arguments  []kgraph.EventArgument `json:"arguments,omitempty"`
-		Attributes map[string]string  `json:"attributes,omitempty"`
-		Source     string             `json:"source"`
-		ExtractedAt time.Time        `json:"extracted_at,omitempty"`
-		Confidence float64           `json:"confidence,omitempty"`
-		Extractor  string            `json:"extractor,omitempty"`
+		ID          string                 `json:"id"`
+		Type        string                 `json:"type"`
+		Trigger     string                 `json:"trigger"`
+		Time        time.Time              `json:"time,omitempty"`
+		Arguments   []kgraph.EventArgument `json:"arguments,omitempty"`
+		Attributes  map[string]string      `json:"attributes,omitempty"`
+		Source      string                 `json:"source"`
+		ExtractedAt time.Time              `json:"extracted_at,omitempty"`
+		Confidence  float64                `json:"confidence,omitempty"`
+		Extractor   string                 `json:"extractor,omitempty"`
 	}
 	if err := json.Unmarshal(data, &flat); err != nil {
 		return nil, fmt.Errorf("unmarshal event: %w", err)

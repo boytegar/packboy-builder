@@ -24,59 +24,59 @@ import (
 type SourceKind string
 
 const (
-	SourceStructured       SourceKind = "structured"       // tables, JSON, CSV
-	SourceSemiStructured   SourceKind = "semi-structured"  // HTML, XML
-	SourceUnstructured     SourceKind = "unstructured"     // PDF, plain text
+	SourceStructured     SourceKind = "structured"      // tables, JSON, CSV
+	SourceSemiStructured SourceKind = "semi-structured" // HTML, XML
+	SourceUnstructured   SourceKind = "unstructured"    // PDF, plain text
 )
 
 // Source describes a single input to the extraction pipeline.
 type Source struct {
 	Kind   SourceKind `json:"kind"`
-	Path   string     `json:"path"`   // file path, URL, or table identifier
+	Path   string     `json:"path"`             // file path, URL, or table identifier
 	Format string     `json:"format,omitempty"` // "csv", "json", "html", "pdf", "txt"
 }
 
 // ExtractionResult holds the output of one extraction pass on a source.
 type ExtractionResult struct {
-	Source     Source             `json:"source"`
-	Entities   []EntityCandidate  `json:"entities"`
-	Relations  []RelationCandidate `json:"relations,omitempty"`
-	Events     []EventCandidate    `json:"events,omitempty"`
-	Errors     []string            `json:"errors,omitempty"`
-	ExtractedAt time.Time          `json:"extracted_at"`
+	Source      Source              `json:"source"`
+	Entities    []EntityCandidate   `json:"entities"`
+	Relations   []RelationCandidate `json:"relations,omitempty"`
+	Events      []EventCandidate    `json:"events,omitempty"`
+	Errors      []string            `json:"errors,omitempty"`
+	ExtractedAt time.Time           `json:"extracted_at"`
 }
 
 // EntityCandidate is an extracted entity awaiting validation + fusion.
 type EntityCandidate struct {
 	Type       string            `json:"type"`
 	Label      string            `json:"label"`
-	Span       string            `json:"span"`       // verbatim evidence
+	Span       string            `json:"span"` // verbatim evidence
 	Attributes map[string]string `json:"attributes,omitempty"`
 	Confidence float64           `json:"confidence,omitempty"`
 }
 
 // RelationCandidate is an extracted typed triple awaiting validation.
 type RelationCandidate struct {
-	Relation   string            `json:"relation"`
-	SubjectLabel string          `json:"subject_label"`
-	ObjectLabel  string          `json:"object_label"`
-	Span         string           `json:"span"`
-	Confidence   float64          `json:"confidence,omitempty"`
+	Relation     string  `json:"relation"`
+	SubjectLabel string  `json:"subject_label"`
+	ObjectLabel  string  `json:"object_label"`
+	Span         string  `json:"span"`
+	Confidence   float64 `json:"confidence,omitempty"`
 }
 
 // EventCandidate is an extracted event awaiting validation.
 type EventCandidate struct {
-	Type      string         `json:"type"`
-	Trigger   string         `json:"trigger"`
-	Span      string         `json:"span"`
-	Time      time.Time      `json:"time,omitempty"`
+	Type      string              `json:"type"`
+	Trigger   string              `json:"trigger"`
+	Span      string              `json:"span"`
+	Time      time.Time           `json:"time,omitempty"`
 	Arguments []EventArgCandidate `json:"arguments,omitempty"`
 }
 
 // EventArgCandidate is a role-filled participant in an extracted event.
 type EventArgCandidate struct {
-	Role       string `json:"role"`
-	Label      string `json:"label"` // entity label, resolved later
+	Role  string `json:"role"`
+	Label string `json:"label"` // entity label, resolved later
 }
 
 // Router splits sources by kind and routes to the appropriate method.
@@ -209,8 +209,8 @@ func ApplyRejectionRules(candidates []RelationCandidate, rules []RejectionRule) 
 
 // FailureMode describes a likely extraction failure and how to detect it.
 type FailureMode struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
 	DetectionCheck string `json:"detection_check"`
 }
 
@@ -249,10 +249,10 @@ func CommonFailureModes(kind SourceKind) []FailureMode {
 
 // HandCheckProtocol defines the 50-document sampling protocol.
 type HandCheckProtocol struct {
-	SampleSize     int    `json:"sample_size"`
-	WhatToRecord   string `json:"what_to_record"`
-	StopThreshold  string `json:"stop_threshold"`
-	Fields         []string `json:"fields"`
+	SampleSize    int      `json:"sample_size"`
+	WhatToRecord  string   `json:"what_to_record"`
+	StopThreshold string   `json:"stop_threshold"`
+	Fields        []string `json:"fields"`
 }
 
 // DefaultHandCheckProtocol returns the standard 50-document protocol.

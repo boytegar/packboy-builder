@@ -64,7 +64,7 @@ type JobStatus string
 
 const (
 	JobPending   JobStatus = "pending"
-	JobReady     JobStatus = "ready"     // all deps done, can start
+	JobReady     JobStatus = "ready" // all deps done, can start
 	JobRunning   JobStatus = "running"
 	JobVerifying JobStatus = "verifying"
 	JobDone      JobStatus = "done"
@@ -96,8 +96,8 @@ func (j *Job) Validate() error {
 // This is a DAG — the pattern that has run data infrastructure for decades
 // (Airflow, Prefect, Temporal) now applied to agents (LangGraph, CrewAI, AutoGen).
 type TaskGraph struct {
-	mu       sync.RWMutex
-	jobs     map[string]*Job
+	mu   sync.RWMutex
+	jobs map[string]*Job
 	// jobOrder preserves insertion order for stable iteration.
 	jobOrder []string
 }
@@ -165,8 +165,8 @@ func (g *TaskGraph) FindFakeEdges() []FakeEdge {
 			}
 			if !stateReferences(dep.State, job.State) {
 				fakes = append(fakes, FakeEdge{
-					From: depID,
-					To:   job.ID,
+					From:   depID,
+					To:     job.ID,
 					Reason: fmt.Sprintf("job %q does not reference any state from %q", job.ID, depID),
 				})
 			}
@@ -302,8 +302,8 @@ func (g *TaskGraph) ParallelLevels() ([][]string, error) {
 type Diamond struct {
 	Plan     string   `json:"plan"`     // the split point
 	Workers  []string `json:"workers"`  // parallel worker job IDs
-	Verifier string   `json:"verifier"`  // separate verifier context
-	Merger   string   `json:"merger"`    // one owned merge
+	Verifier string   `json:"verifier"` // separate verifier context
+	Merger   string   `json:"merger"`   // one owned merge
 }
 
 // Validate checks that the diamond is well-formed: has workers, a separate
@@ -438,7 +438,7 @@ func (g *TaskGraph) AnalyzeStopRule() StopRuleAnalysis {
 // Guardrails are the four caps that keep a graph from becoming an expensive
 // accident.
 type Guardrails struct {
-	MaxRoundsPerLoop  int `json:"max_rounds_per_loop"`  // 1. Every loop gets a maximum
+	MaxRoundsPerLoop    int `json:"max_rounds_per_loop"`   // 1. Every loop gets a maximum
 	MaxConcurrentAgents int `json:"max_concurrent_agents"` // 4. A hard cap on how many agents can spawn
 }
 

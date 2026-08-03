@@ -63,8 +63,8 @@ func TestReviewBand(t *testing.T) {
 func TestLevenshteinMatcher(t *testing.T) {
 	m := LevenshteinMatcher{
 		LabelWeight: 1.0,
-		AttrWeights:  map[string]float64{"email": 0.5},
-		Threshold:    0.85,
+		AttrWeights: map[string]float64{"email": 0.5},
+		Threshold:   0.85,
 	}
 	c1 := EntityCandidate{Label: "Alice", Attributes: map[string]string{"email": "alice@x.com"}}
 	c2 := EntityCandidate{Label: "Alice", Attributes: map[string]string{"email": "alice@x.com"}}

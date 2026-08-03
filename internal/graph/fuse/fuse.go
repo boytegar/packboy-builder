@@ -205,11 +205,11 @@ type MergeRecord struct {
 // Pipeline runs the full fusion process on a set of candidates against an
 // existing graph store.
 type Pipeline struct {
-	Blocker   Blocker
-	Matcher   MatchFunction
-	Band      ReviewBand
-	Policy    MergePolicy
-	Store     *graph.Store
+	Blocker Blocker
+	Matcher MatchFunction
+	Band    ReviewBand
+	Policy  MergePolicy
+	Store   *graph.Store
 }
 
 // Run executes the fusion pipeline. Returns merge records and human-review
@@ -251,9 +251,9 @@ func (p *Pipeline) Run(candidates []EntityCandidate) ([]MergeRecord, []ReviewIte
 					merges = append(merges, rec)
 				case DecisionHuman:
 					reviews = append(reviews, ReviewItem{
-						Candidate:  c,
-						Existing:   existing,
-						Score:      score,
+						Candidate: c,
+						Existing:  existing,
+						Score:     score,
 					})
 				case DecisionAutoReject:
 					// Not a match — add as new node.

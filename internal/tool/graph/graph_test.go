@@ -53,9 +53,9 @@ func TestGraphToolAddNodeEdge(t *testing.T) {
 	result := tt.Execute(context.Background(), map[string]any{
 		"action": "add_node",
 		"node": map[string]any{
-			"id":    "p1",
-			"type":  "Person",
-			"label": "Alice",
+			"id":     "p1",
+			"type":   "Person",
+			"label":  "Alice",
 			"source": "test",
 		},
 	}, dir)
@@ -67,9 +67,9 @@ func TestGraphToolAddNodeEdge(t *testing.T) {
 	tt.Execute(context.Background(), map[string]any{
 		"action": "add_node",
 		"node": map[string]any{
-			"id":    "c1",
-			"type":  "Company",
-			"label": "Acme",
+			"id":     "c1",
+			"type":   "Company",
+			"label":  "Acme",
 			"source": "test",
 		},
 	}, dir)

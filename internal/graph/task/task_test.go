@@ -126,8 +126,8 @@ func TestHumanGates(t *testing.T) {
 
 func TestStopRuleAnalysis(t *testing.T) {
 	g := NewTaskGraph()
-	g.AddJob(&Job{ID: "a", Name: "A"}) // splittable (no deps)
-	g.AddJob(&Job{ID: "b", Name: "B"}) // splittable
+	g.AddJob(&Job{ID: "a", Name: "A"})                              // splittable (no deps)
+	g.AddJob(&Job{ID: "b", Name: "B"})                              // splittable
 	g.AddJob(&Job{ID: "c", Name: "C", Dependencies: []string{"a"}}) // sequential
 
 	analysis := g.AnalyzeStopRule()
@@ -166,8 +166,8 @@ func TestFakeEdgeDetection(t *testing.T) {
 	g := NewTaskGraph()
 	// Real edge: b reads a's state.
 	g.AddJob(&Job{
-		ID:   "a",
-		Name: "A",
+		ID:    "a",
+		Name:  "A",
 		State: map[string]string{"result": "data"},
 	})
 	g.AddJob(&Job{

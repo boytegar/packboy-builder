@@ -24,7 +24,7 @@ type Store struct {
 	ontology *Ontology
 	nodes    map[string]*Node
 	edges    map[string]*Edge
-	events  map[string]*Event
+	events   map[string]*Event
 	// index: alias → node ID, for entity resolution (fusion).
 	aliasIndex map[string]string
 	// index: type → node IDs, for typed queries.
@@ -35,10 +35,10 @@ type Store struct {
 
 // MergeRecord logs a single merge operation so it can be undone.
 type MergeRecord struct {
-	Timestamp  time.Time `json:"timestamp"`
-	Survivor   string    `json:"survivor"`   // node ID that survived
-	absorbed   string    `json:"absorbed"`    // node ID that was absorbed
-	Reason     string    `json:"reason,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+	Survivor  string    `json:"survivor"` // node ID that survived
+	absorbed  string    `json:"absorbed"` // node ID that was absorbed
+	Reason    string    `json:"reason,omitempty"`
 }
 
 // NewStore creates a new graph store. If filePath is non-empty, the store
@@ -317,12 +317,12 @@ func (s *Store) ValidateAll() error {
 
 // Stats holds summary counts for the graph store.
 type Stats struct {
-	NodeCount   int            `json:"node_count"`
-	EdgeCount   int            `json:"edge_count"`
-	EventCount  int            `json:"event_count"`
-	TypeCounts  map[string]int `json:"type_counts"`
-	RelCounts   map[string]int `json:"relation_counts"`
-	MergeCount  int            `json:"merge_count"`
+	NodeCount  int            `json:"node_count"`
+	EdgeCount  int            `json:"edge_count"`
+	EventCount int            `json:"event_count"`
+	TypeCounts map[string]int `json:"type_counts"`
+	RelCounts  map[string]int `json:"relation_counts"`
+	MergeCount int            `json:"merge_count"`
 }
 
 // Stats returns summary statistics about the current graph.
@@ -380,11 +380,11 @@ func (s *Store) persistLockedPath(path string) error {
 		}
 	}
 	data := struct {
-		Ontology  *Ontology      `json:"ontology,omitempty"`
-		Nodes     []*Node        `json:"nodes"`
-		Edges     []*Edge        `json:"edges"`
-		Events    []*Event       `json:"events,omitempty"`
-		MergeLog  []MergeRecord  `json:"merge_log,omitempty"`
+		Ontology *Ontology     `json:"ontology,omitempty"`
+		Nodes    []*Node       `json:"nodes"`
+		Edges    []*Edge       `json:"edges"`
+		Events   []*Event      `json:"events,omitempty"`
+		MergeLog []MergeRecord `json:"merge_log,omitempty"`
 	}{
 		Ontology: s.ontology,
 		Nodes:    s.allNodesLocked(),

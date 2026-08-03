@@ -21,10 +21,10 @@ import (
 type QuestionType string
 
 const (
-	QTLookup      QuestionType = "lookup"       // single-hop: "what is X?"
-	QTMultiHop   QuestionType = "multi_hop"    // "who worked with X on Y?"
-	QTSubgraph   QuestionType = "subgraph"     // "everything related to X"
-	QTVectorOnly QuestionType = "vector_only"  // does not need the graph
+	QTLookup     QuestionType = "lookup"      // single-hop: "what is X?"
+	QTMultiHop   QuestionType = "multi_hop"   // "who worked with X on Y?"
+	QTSubgraph   QuestionType = "subgraph"    // "everything related to X"
+	QTVectorOnly QuestionType = "vector_only" // does not need the graph
 )
 
 // ClassifyQuestion returns the question type for routing. This is the
@@ -232,26 +232,26 @@ type VectorBaseline struct {
 
 // BaselineResult holds one question's baseline performance.
 type BaselineResult struct {
-	Question  string `json:"question"`
-	Answer    string `json:"answer"`
-	Correct   bool   `json:"correct"`
+	Question string `json:"question"`
+	Answer   string `json:"answer"`
+	Correct  bool   `json:"correct"`
 }
 
 // ── Eval set ────────────────────────────────────────────────────
 
 // EvalSet is the 30-question eval set written before either system runs.
 type EvalSet struct {
-	Items     []EvalItem `json:"items"`
+	Items     []EvalItem        `json:"items"`
 	AnswerKey map[string]string `json:"answer_key"`
-	Metric    string     `json:"metric"` // "exact_match", "f1", "hallucination_rate"
+	Metric    string            `json:"metric"` // "exact_match", "f1", "hallucination_rate"
 }
 
 // EvalItem is one question in the eval set.
 type EvalItem struct {
-	ID        string `json:"id"`
-	Question  string `json:"question"`
-	Answer    string `json:"answer"` // gold answer, written before either system runs
-	Type      QuestionType `json:"type"`
+	ID       string       `json:"id"`
+	Question string       `json:"question"`
+	Answer   string       `json:"answer"` // gold answer, written before either system runs
+	Type     QuestionType `json:"type"`
 }
 
 // NewEvalSet creates an eval set from items. The answer key is extracted from

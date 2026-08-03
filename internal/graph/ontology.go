@@ -33,10 +33,10 @@ type EntityType struct {
 
 // Attribute is a property of an entity type.
 type Attribute struct {
-	Name      string `json:"name" yaml:"name"`
-	Type      string `json:"type" yaml:"type"` // string, int, float, bool, datetime
-	Required  bool   `json:"required,omitempty" yaml:"required,omitempty"`
-	Functional bool  `json:"functional,omitempty" yaml:"functional,omitempty"` // at most one value
+	Name       string `json:"name" yaml:"name"`
+	Type       string `json:"type" yaml:"type"` // string, int, float, bool, datetime
+	Required   bool   `json:"required,omitempty" yaml:"required,omitempty"`
+	Functional bool   `json:"functional,omitempty" yaml:"functional,omitempty"` // at most one value
 }
 
 // Relation defines a typed edge between entity types. Every relation gets a
@@ -44,10 +44,10 @@ type Attribute struct {
 // entity types may appear at each endpoint — this one validation step removes
 // most hallucinated structure.
 type Relation struct {
-	Name        string `json:"name" yaml:"name"`           // verb, e.g. "ACQUIRED"
+	Name        string `json:"name" yaml:"name"` // verb, e.g. "ACQUIRED"
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
-	Domain      string `json:"domain" yaml:"domain"`        // subject entity type
-	Range       string `json:"range" yaml:"range"`          // object entity type
+	Domain      string `json:"domain" yaml:"domain"`                               // subject entity type
+	Range       string `json:"range" yaml:"range"`                                 // object entity type
 	Cardinality string `json:"cardinality,omitempty" yaml:"cardinality,omitempty"` // 1:1, 1:N, N:M
 	Functional  bool   `json:"functional,omitempty" yaml:"functional,omitempty"`
 	Inverse     string `json:"inverse,omitempty" yaml:"inverse,omitempty"` // inverse relation name

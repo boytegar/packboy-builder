@@ -8,14 +8,14 @@ import (
 
 func TestRouterClassify(t *testing.T) {
 	o := &graph.Ontology{
-		Name: "test",
+		Name:        "test",
 		EntityTypes: []graph.EntityType{{Name: "Person"}},
 	}
 	r := NewRouter(o)
 
 	tests := []struct {
-		src    Source
-		want   SourceKind
+		src  Source
+		want SourceKind
 	}{
 		{Source{Format: "csv"}, SourceStructured},
 		{Source{Format: "json"}, SourceStructured},
@@ -71,8 +71,8 @@ func TestValidateRelations(t *testing.T) {
 	r := NewRouter(o)
 
 	resolved := map[string]string{
-		"Alice": "Person",
-		"Acme":  "Company",
+		"Alice":  "Person",
+		"Acme":   "Company",
 		"Casper": "Ghost", // not in ontology
 	}
 
@@ -94,8 +94,8 @@ func TestValidateRelations(t *testing.T) {
 func TestRejectionRules(t *testing.T) {
 	candidates := []RelationCandidate{
 		{Relation: "R", SubjectLabel: "A", ObjectLabel: "B", Span: "evidence", Confidence: 0.9},
-		{Relation: "R", SubjectLabel: "A", ObjectLabel: "C", Span: "", Confidence: 0.9},           // empty span
-		{Relation: "R", SubjectLabel: "D", ObjectLabel: "E", Span: "evidence", Confidence: 0.3},  // low confidence
+		{Relation: "R", SubjectLabel: "A", ObjectLabel: "C", Span: "", Confidence: 0.9},         // empty span
+		{Relation: "R", SubjectLabel: "D", ObjectLabel: "E", Span: "evidence", Confidence: 0.3}, // low confidence
 	}
 	rules := []RejectionRule{
 		RejectLowConfidence(0.5),

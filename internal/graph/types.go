@@ -48,15 +48,15 @@ func (p Provenance) Validate() error {
 // Node is an entity in the knowledge graph. It carries an entity type from
 // the ontology, a set of attributes, and provenance.
 type Node struct {
-	ID          string            `json:"id"`
-	Type        string            `json:"type"`        // entity type from ontology
-	Label       string            `json:"label"`        // human-readable name
-	Attributes  map[string]string `json:"attributes,omitempty"`
-	Aliases     []string          `json:"aliases,omitempty"` // surface forms that resolved to this node
-	Provenance  Provenance        `json:"provenance"`
+	ID         string            `json:"id"`
+	Type       string            `json:"type"`  // entity type from ontology
+	Label      string            `json:"label"` // human-readable name
+	Attributes map[string]string `json:"attributes,omitempty"`
+	Aliases    []string          `json:"aliases,omitempty"` // surface forms that resolved to this node
+	Provenance Provenance        `json:"provenance"`
 	// MergedFrom tracks node IDs that were merged into this one. Enables
 	// reversible merges — undo by restoring the merged nodes.
-	MergedFrom  []string          `json:"merged_from,omitempty"`
+	MergedFrom []string `json:"merged_from,omitempty"`
 }
 
 // Validate checks that a node is well-formed against the given ontology.
@@ -119,12 +119,12 @@ func (n *Node) HasAlias(alias string) bool {
 // Edge is a typed relation between two nodes, constrained by the ontology's
 // domain/range. Every edge carries provenance.
 type Edge struct {
-	ID         string     `json:"id"`
-	Relation   string     `json:"relation"` // relation name from ontology
-	Subject    string     `json:"subject"`  // node ID
-	Object     string     `json:"object"`   // node ID
+	ID         string            `json:"id"`
+	Relation   string            `json:"relation"` // relation name from ontology
+	Subject    string            `json:"subject"`  // node ID
+	Object     string            `json:"object"`   // node ID
 	Attributes map[string]string `json:"attributes,omitempty"`
-	Provenance Provenance `json:"provenance"`
+	Provenance Provenance        `json:"provenance"`
 }
 
 // Validate checks that an edge is well-formed and domain/range-valid against
@@ -160,18 +160,18 @@ func (e *Edge) Validate(o *Ontology, subjectType, objectType string) error {
 // kept separate from entity nodes — never collapse a cause into an attribute.
 type Event struct {
 	ID         string            `json:"id"`
-	Type       string            `json:"type"` // event type
-	Trigger    string            `json:"trigger"`    // the word/phrase that signals the event
+	Type       string            `json:"type"`           // event type
+	Trigger    string            `json:"trigger"`        // the word/phrase that signals the event
 	Time       time.Time         `json:"time,omitempty"` // time anchor
-	Arguments  []EventArgument  `json:"arguments,omitempty"`
+	Arguments  []EventArgument   `json:"arguments,omitempty"`
 	Attributes map[string]string `json:"attributes,omitempty"`
 	Provenance Provenance        `json:"provenance"`
 }
 
 // EventArgument is a typed role-filled participant in an event.
 type EventArgument struct {
-	Role     string `json:"role"`     // e.g. "agent", "patient", "instrument"
-	NodeID   string `json:"node_id"`  // entity node filling the role
+	Role     string `json:"role"`    // e.g. "agent", "patient", "instrument"
+	NodeID   string `json:"node_id"` // entity node filling the role
 	NodeType string `json:"node_type,omitempty"`
 }
 
