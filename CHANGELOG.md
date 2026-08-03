@@ -3,6 +3,15 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v1.22.6] - 2026-08-03
+
+### Added
+- Ship the `internal/graph` package (ontology, extract, fuse, eval, serve, task store) plus a Graph tool and `/graph` prompt commands for knowledge-graph engineering and task-graph orchestration.
+- Add `/plan` as a built-in prompt command and expand operation-mode / permission settings around plan and bypass flows.
+
+### Changed
+- Improve status-bar and modal copy for mode switches, and honor config bypass / self-learn update settings more consistently in the TUI lifecycle.
+
 ## [v1.22.5] - 2026-08-02
 
 ### Added

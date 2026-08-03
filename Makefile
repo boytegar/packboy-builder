@@ -127,17 +127,17 @@ release-push:
 
 # Refresh aur/pcb-bin from a published GitHub release (checksums + .SRCINFO).
 # Pass an explicit release tag; do not rely on git-describe defaults.
-# Example: make aur-update VERSION=v1.22.4
+# Example: make aur-update VERSION=v1.22.6
 aur-update:
 	@echo "$(VERSION)" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$$' || { \
-		echo "VERSION is required, e.g. make aur-update VERSION=v1.22.4"; exit 1; }
+		echo "VERSION is required, e.g. make aur-update VERSION=v1.22.6"; exit 1; }
 	@./aur/update.sh "$(VERSION)"
 
 # Update local AUR files and push to aur.archlinux.org.
 # Requires SSH key registered on AUR (AUR_SSH_KEY, default ~/.ssh/id_ed25519_aur).
-# Example: make aur-push VERSION=v1.22.4
-# Optional: AUR_PKGREL=2 make aur-push VERSION=v1.22.4
+# Example: make aur-push VERSION=v1.22.6
+# Optional: AUR_PKGREL=2 make aur-push VERSION=v1.22.6
 aur-push:
 	@echo "$(VERSION)" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$$' || { \
-		echo "VERSION is required, e.g. make aur-push VERSION=v1.22.4"; exit 1; }
+		echo "VERSION is required, e.g. make aur-push VERSION=v1.22.6"; exit 1; }
 	@./aur/update.sh "$(VERSION)" --push

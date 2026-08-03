@@ -33,7 +33,7 @@ import (
 	_ "github.com/boytegar/packboy-builder/internal/llm/volcengine"
 )
 
-var version = "1.22.1"
+var version = "1.22.6"
 
 // buildTime and commit are set at build time via -X ldflags.
 // When built directly with go build (without ldflags), they remain empty.
