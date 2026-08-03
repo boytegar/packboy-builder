@@ -92,6 +92,10 @@ func applyStartupSettings(environment *env, settings *setting.Data, cwd string, 
 	environment.ApplyDefaultPermissionMode(settings.StartupMode(), cwd, allowBypass)
 	hookEngine.SetPermissionMode(environment.OperationModeName())
 	environment.ShowContextBar = settings.ShowContextBar()
+	// Restore the persisted /yolo bypass flag so it survives restarts
+	// independent of the operation mode. Restored after the mode posture so
+	// the bypass layer sits on top of the mode's own allowances.
+	environment.ApplyPersistedBypass(settings.BypassEnabledOn())
 	environment.AutoPilot = settings.AutoPilot.Clone()
 }
 

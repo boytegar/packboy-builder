@@ -126,3 +126,47 @@ func TestUpdateSelfLearnAtPreservesOtherSettings(t *testing.T) {
 		t.Fatalf("selfLearn not written: %+v", d.SelfLearn)
 	}
 }
+
+// TestSaveBypassEnabledRoundTrip confirms the bypass toggle persists an on
+// and off choice distinctly (off must not be dropped as a zero value), and
+// that unrelated settings in the same file survive.
+func TestSaveBypassEnabledRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	file := userSettingsFile(home)
+
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte(`{"model":"claude-x"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	read := func() (bool, bool) {
+		t.Helper()
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		var d Data
+		if err := json.Unmarshal(data, &d); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return d.BypassEnabledOn(), d.Model == "claude-x"
+	}
+
+	if err := SaveBypassEnabled(true); err != nil {
+		t.Fatalf("save on: %v", err)
+	}
+	if on, ok := read(); !on || !ok {
+		t.Fatalf("after save on: bypass=%v unrelated=%v", on, ok)
+	}
+
+	if err := SaveBypassEnabled(false); err != nil {
+		t.Fatalf("save off: %v", err)
+	}
+	if on, ok := read(); on || !ok {
+		t.Fatalf("after save off: bypass=%v unrelated=%v (off dropped as zero value?)", on, ok)
+	}
+}

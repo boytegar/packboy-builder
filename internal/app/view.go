@@ -101,9 +101,27 @@ func (m *model) renderNormalView(separator, trackerView string) (string, *tea.Cu
 	activeContent := conv.RenderActiveContent(m.messageRenderParams())
 	chatSection := tailLines(m.renderChatSection(activeContent, trackerView), maxContentHeight)
 
-	// The footer's row offsets are relative to its own first line; the chat
-	// section above it shifts them all down.
-	return chatSection + footer, m.inputCursor(strings.Count(chatSection, "\n") + inputRow)
+	view := chatSection + footer
+	// While the startup banner is still live (not yet frozen into scrollback),
+	// pad the managed frame to the full terminal height. A full-height managed
+	// frame keeps the entire screen owned by the inline renderer, so a
+	// terminal shrink can't reflow the live banner into native history (which
+	// would duplicate it). This padding is only needed pre-commit — once the
+	// banner is frozen (welcomePending=false) the frame shrinks so committed
+	// scrollback sits directly above the input without a blank gap.
+	padding := 0
+	if m.welcomePending {
+		padding = m.env.Height - (strings.Count(view, "\n") + 1)
+		if padding < 0 {
+			padding = 0
+		}
+	}
+	if padding > 0 {
+		view = strings.Repeat("\n", padding) + view
+		inputRow += padding
+	}
+
+	return view, m.inputCursor(strings.Count(chatSection, "\n") + inputRow)
 }
 
 // inputCursor returns where the terminal cursor belongs inside the composer.

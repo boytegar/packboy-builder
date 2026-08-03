@@ -37,6 +37,11 @@ type Data struct {
 	// allowed (bypass is in the Shift+Tab cycle by default); set false to
 	// lock it out. Read via Settings.AllowBypass().
 	AllowBypass *bool `json:"allowBypass,omitempty"`
+	// BypassEnabled persists the /yolo bypass-permissions toggle so it
+	// survives restarts independent of the operation mode. Pointer so an
+	// explicit "off" persists distinctly from "unset"; nil (unset) means
+	// off — bypass is opt-in on startup. Read via Data.BypassEnabledOn().
+	BypassEnabled *bool `json:"bypassEnabled,omitempty"`
 	// StreamFirstChunkTimeout overrides the core default (5m) for time-to-first-
 	// chunk. A valid time.Duration string (e.g. "5m", "120s"); empty = core default.
 	StreamFirstChunkTimeout string `json:"streamFirstChunkTimeout,omitempty"`
@@ -408,6 +413,13 @@ func (s SelfLearnSettings) Validate() error {
 // Nil (unset) resolves to off — the bar is opt-in.
 func (s *Data) ShowContextBar() bool {
 	return s != nil && s.ContextBar != nil && *s.ContextBar
+}
+
+// BypassEnabledOn reports whether the persisted bypass-permissions toggle is
+// on. Nil (unset) resolves to off — bypass is opt-in on startup, restored
+// separately from the operation mode.
+func (s *Data) BypassEnabledOn() bool {
+	return s != nil && s.BypassEnabled != nil && *s.BypassEnabled
 }
 
 // StartupMode is the operation mode a new session starts in: the mode the user
@@ -840,6 +852,10 @@ func (s *Data) Clone() *Data {
 	if s.AllowBypass != nil {
 		v := *s.AllowBypass
 		dst.AllowBypass = &v
+	}
+	if s.BypassEnabled != nil {
+		v := *s.BypassEnabled
+		dst.BypassEnabled = &v
 	}
 	if s.ContextBar != nil {
 		v := *s.ContextBar

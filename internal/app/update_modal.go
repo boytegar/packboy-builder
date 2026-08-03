@@ -72,6 +72,7 @@ func (m *model) applyYoloMode(enable *bool) string {
 		}
 		m.env.SessionPermissions.SetBypass(true)
 		m.services.Hook.SetPermissionMode(m.env.OperationModeName())
+		m.persistBypass(true)
 		return "Bypass permissions on — tool calls auto-accepted. Active mode: " + m.env.OperationModeName() + " (shift+tab to cycle)."
 	}
 	if !currentlyOn {
@@ -79,7 +80,18 @@ func (m *model) applyYoloMode(enable *bool) string {
 	}
 	m.env.SessionPermissions.SetBypass(false)
 	m.services.Hook.SetPermissionMode(m.env.OperationModeName())
+	m.persistBypass(false)
 	return "Bypass permissions off. Active mode: " + m.env.OperationModeName() + "."
+}
+
+// persistBypass saves the bypass toggle to ~/.pcb/settings.json so it is
+// restored on the next startup independent of the operation mode. Failures
+// are non-fatal: the in-memory state already changed, only the persistence
+// failed, so log and carry on.
+func (m *model) persistBypass(on bool) {
+	if err := setting.SaveBypassEnabled(on); err != nil {
+		log.Logger().Warn("persist bypass toggle", zap.Bool("on", on), zap.Error(err))
+	}
 }
 
 // autopilotSettleDelay is how long the mode must rest on AutoPilot before the

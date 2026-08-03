@@ -591,6 +591,20 @@ func SaveContextBar(on bool) error {
 	return nil
 }
 
+// SaveBypassEnabled persists the /yolo bypass-permissions toggle to
+// ~/.pcb/settings.json so it survives restarts independent of the operation
+// mode. Written as an explicit pointer so "off" overrides an inherited "on"
+// instead of being dropped as a zero value (see Data.BypassEnabled).
+func SaveBypassEnabled(on bool) error {
+	if err := NewLoader().SaveToUser(&Data{BypassEnabled: &on}); err != nil {
+		return err
+	}
+	loadedSettingsMu.Lock()
+	loadedSettings = nil
+	loadedSettingsMu.Unlock()
+	return nil
+}
+
 // SavePersonaAt persists the chosen persona name at the given scope: the
 // project file (.pcb/settings.json under cwd) when userLevel is false, or the
 // user file (~/.pcb/settings.json) when true. An empty name clears the field.
