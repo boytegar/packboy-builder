@@ -294,7 +294,8 @@ func (r *Registry) GetSkillsSection() string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("Use the Skill tool to invoke these capabilities:\n\n")
+	sb.WriteString("Use the Skill tool to invoke these capabilities.\n\n")
+	sb.WriteString("IMPORTANT: When a user request or subtask matches one of these skills, you SHOULD invoke the matching skill via the Skill tool BEFORE attempting other approaches — the skill may contain specialized instructions, scripts, or references that produce a better result than ad-hoc work. Match by skill name or description relevance.\n\n")
 
 	for _, skill := range active {
 		// Only include name and description (progressive loading)
@@ -407,6 +408,89 @@ func (r *Registry) GetDisabledAt(userLevel bool) map[string]bool {
 // This is an alias for GetSkillsSection to satisfy the Service interface.
 func (r *Registry) PromptSection() string {
 	return r.GetSkillsSection()
+}
+
+// MatchForPrompt returns the full invocation prompts of active skills whose
+// name or description keywords appear in the given text. The caller injects
+// these as <system-reminder> content so the model uses the matching skill
+// without an explicit Skill tool call. Matching is deliberately conservative:
+// only active skills (model-aware) participate, and the skill name must
+// appear as a word in the text, or the description's primary keyword(s)
+// (first few words, lowercased) must overlap. This avoids false-positive
+// injections for generic words.
+func (r *Registry) MatchForPrompt(text string) []string {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Build a lowercase token set from the user text for set membership.
+	tokens := tokenizePrompt(text)
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	var matches []string
+	for _, sk := range r.skills {
+		if !sk.IsActive() {
+			continue
+		}
+		if skillMatchesText(sk, tokens) {
+			if prompt := r.GetSkillInvocationPrompt(sk.FullName()); prompt != "" {
+				matches = append(matches, prompt)
+			}
+		}
+	}
+	return matches
+}
+
+// tokenizePrompt splits text into a lowercase set of word tokens for
+// set-membership matching. Tokens shorter than 3 chars are dropped to reduce
+// noise ("a", "to", "do").
+func tokenizePrompt(text string) map[string]bool {
+	text = strings.ToLower(text)
+	fields := strings.FieldsFunc(text, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == ',' || r == ';' || r == '.' || r == '/' || r == '-' || r == '_'
+	})
+	set := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		if len(f) >= 3 {
+			set[f] = true
+		}
+	}
+	return set
+}
+
+// skillMatchesText reports whether an active skill's name or description
+// keywords appear in the tokenized user text. The name and namespace are
+// checked as whole-word matches; the description contributes its longest
+// content words (>=4 chars) so a skill like "commit: create a git commit"
+// matches when the user says "commit" or "git".
+func skillMatchesText(sk *Skill, tokens map[string]bool) bool {
+	// Name (and namespace) as whole words.
+	for _, part := range strings.Fields(strings.ToLower(sk.Name)) {
+		if len(part) >= 3 && tokens[part] {
+			return true
+		}
+	}
+	if sk.Namespace != "" {
+		for _, part := range strings.Fields(strings.ToLower(sk.Namespace)) {
+			if len(part) >= 3 && tokens[part] {
+				return true
+			}
+		}
+	}
+	// Description keywords: words >=5 chars. This keeps the match specific
+	// (e.g. "commit", "review", "deploy") rather than matching "the", "and",
+	// or generic 4-char words like "code" or "this".
+	for _, w := range strings.Fields(strings.ToLower(sk.Description)) {
+		w = strings.Trim(w, ".,;:()[]")
+		if len(w) >= 5 && tokens[w] {
+			return true
+		}
+	}
+	return false
 }
 
 // NewRegistryForTest creates a Registry with pre-populated skills and stores.

@@ -119,4 +119,6 @@ type AgentConfigInfo struct {
 	// Source indicates where the agent definition came from:
 	// "user", "project", or a plugin scope. Empty defaults to project.
 	Source string
+	// AllowWrite mirrors AgentConfig.AllowWrite for display/UI.
+	AllowWrite bool
 }

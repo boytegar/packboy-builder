@@ -41,6 +41,7 @@ const (
 	providerItemAuthMethod                              // expanded auth-method sub-row (Providers tab)
 	providerItemSubagent                                // selectable subagent row (Subagents tab phase 1)
 	providerItemSubagentDefault                         // selectable default-model row (Subagents tab phase 1)
+	providerItemSubagentDefaultWrite                    // selectable default-model-for-write row (Subagents tab phase 1)
 )
 
 // providerListItem is a single row in the flattened visible-items list.

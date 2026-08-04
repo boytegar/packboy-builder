@@ -11,6 +11,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/app/input"
 	"github.com/boytegar/packboy-builder/internal/app/kit"
 	"github.com/boytegar/packboy-builder/internal/llm"
+	"github.com/boytegar/packboy-builder/internal/setting"
 	"github.com/boytegar/packboy-builder/internal/subagent"
 	"github.com/boytegar/packboy-builder/internal/todo"
 )
@@ -323,6 +324,15 @@ func (m model) renderModeStatus() string {
 	if status := m.services.Hook.CurrentStatusMessageSafe(); status != "" {
 		modelName = status
 	}
+	// Surface the default write model for write-enabled subagents when it
+	// diverges from the main model, so swarm/agent mode users can see the
+	// effective write target at a glance alongside the read model.
+	writeModelName := ""
+	if m.env.OperationMode == setting.ModeSwarm && m.services.Setting != nil {
+		if w := strings.TrimSpace(m.services.Setting.Snapshot().SubagentDefaultModelForWrite); w != "" && w != "inherit" {
+			writeModelName = m.env.ModelDisplayName(w)
+		}
+	}
 	reviewApprovals := 0
 	if m.reviewerApprovals != nil {
 		reviewApprovals = int(m.reviewerApprovals.Load())
@@ -337,6 +347,7 @@ func (m model) renderModeStatus() string {
 		InputTokens:       m.env.InputTokens,
 		InputLimit:        kit.GetEffectiveInputLimit(m.services.LLM.Store(), m.env.CurrentModel),
 		ModelName:         modelName,
+		WriteModelName:    writeModelName,
 		StatusMessage:     m.userInput.Provider.StatusMessage,
 		ConversationCost:  m.env.ConversationCost,
 		Compressions:      m.env.Compressions,

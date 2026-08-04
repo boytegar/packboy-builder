@@ -47,6 +47,7 @@ type Executor struct {
 	parentSessionID            string               // Parent session ID for linking subagent sessions
 	projectInstructions        string               // project memory (CLAUDE.md/AGENTS.md) for edit-capable subagents
 	skillsPrompt               string               // available skills section for capable subagents
+	skillMatcher               SkillMatcher         // optional keyword→skill auto-inject for delegation prompts
 	mcpTools                   mcp.Tools            // tool schemas + execution
 	mcpServers                 mcp.Servers          // connect/disconnect for per-subagent server sets
 	disabledToolsMu            sync.RWMutex
@@ -54,10 +55,10 @@ type Executor struct {
 
 	// subagentModelOverride resolves per-subagent and global default model
 	// overrides from settings.json (set via the /models Subagents tab). It
-	// returns the per-name override and the global default, either of which
-	// may be "" so resolution falls back to the frontmatter / parent. nil =
-	// overrides not wired.
-	subagentModelOverride func(agentName string) (override, defaultModel string)
+	// returns the per-name override, the global default, and the write-default
+	// (for AllowWrite subagents); any may be "" so resolution falls back to
+	// the frontmatter / parent. nil = overrides not wired.
+	subagentModelOverride func(agentName string) (override, defaultModel, writeDefaultModel string)
 }
 
 type SubagentSessionStore interface {
@@ -145,10 +146,11 @@ func (e *Executor) SetModelStore(store *llm.Store, provider llm.Name, authMethod
 }
 
 // SetSubagentModelOverride wires the settings.json-backed model override
-// lookup (set via the /models Subagents tab). fn returns the per-name override
-// and the global default model; either may be "" when not set. nil fn clears
-// the override lookup so resolution falls back to the frontmatter.
-func (e *Executor) SetSubagentModelOverride(fn func(agentName string) (override, defaultModel string)) {
+// lookup (set via the /models Subagents tab). fn returns the per-name
+// override, the global default model, and the write-enabled default model;
+// any may be "" when not set. nil fn clears the override lookup so resolution
+// falls back to the frontmatter.
+func (e *Executor) SetSubagentModelOverride(fn func(agentName string) (override, defaultModel, writeDefaultModel string)) {
 	e.subagentModelOverride = fn
 }
 
@@ -156,6 +158,19 @@ func (e *Executor) SetSubagentModelOverride(fn func(agentName string) (override,
 // with the Skill tool can see and invoke available skills.
 func (e *Executor) SetSkillsDirectory(skillsPrompt string) {
 	e.skillsPrompt = skillsPrompt
+}
+
+// SkillMatcher returns full invocation prompts for active skills whose name
+// or description keywords match the given text. Injected by the app layer so
+// subagents can auto-use matching skills without an explicit Skill tool call.
+type SkillMatcher interface {
+	MatchForPrompt(text string) []string
+}
+
+// SetSkillMatcher wires an optional keyword→skill matcher so delegation
+// prompts auto-inject matching active skills' full instructions.
+func (e *Executor) SetSkillMatcher(m SkillMatcher) {
+	e.skillMatcher = m
 }
 
 // SetMCPDependencies wires MCP tool access and the per-Agent connection lease
@@ -378,7 +393,7 @@ func (e *Executor) prepareRunConfig(ctx context.Context, req tool.AgentExecReque
 		maxSteps = req.MaxSteps
 	}
 
-	provider, modelID, err := e.resolveModel(ctx, req.Model, config.Model, config.Name)
+	provider, modelID, err := e.resolveModel(ctx, req.Model, config.Model, config.Name, config.AllowWrite || e.isWriteEnabled(config.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -503,6 +518,14 @@ func (e *Executor) loadConversation(ag core.Agent, ctx context.Context, rc *runC
 	// Harness-managed reminders ride on the first user message as
 	// <system-reminder> blocks, matching the main agent's pattern.
 	reminders := e.collectSubagentReminders(e.skillsDirectoryFor(rc.config), rc.permMode, rc.config.AllowTools)
+	// Auto-invoke matching active skills: if the delegation prompt mentions a
+	// skill's name or description keywords, inject its full instructions so
+	// the subagent can use it without an explicit Skill tool call.
+	if e.skillMatcher != nil {
+		for _, body := range e.skillMatcher.MatchForPrompt(req.Prompt) {
+			reminders = append(reminders, wrapNonEmpty(body)...)
+		}
+	}
 	prompt := reminder.AttachToContent(req.Prompt, reminders)
 	ag.Append(ctx, core.UserMessage(prompt, nil))
 	return nil
@@ -581,31 +604,41 @@ func (e *Executor) fireSubagentStop(req tool.AgentExecRequest, agentHookID, agen
 }
 
 // resolveModel picks the provider and model id for a run, by priority:
-// 1. Explicit request override (req.Model)
-// 2. settings.json per-subagent override (subagentModels[agentName])
-// 3. Agent configuration (config.Model, the AGENT.md frontmatter)
-// 4. Parent conversation model ("inherit" or empty)
+//  1. Explicit request override (req.Model)
+//  2. settings.json per-subagent override (subagentModels[agentName])
+//  3. Agent configuration (config.Model, the AGENT.md frontmatter)
+//  4. For write-enabled subagents: SubagentDefaultModelForWrite
+//  5. SubagentDefaultModel (global default)
+//  6. Parent conversation model ("inherit" or empty)
 //
 // An explicit "vendor/model" override routes to that vendor through the
 // resolver only when a linked provider can be resolved. Otherwise it falls
 // back to the parent conversation. Every other form — an alias, a bare model
 // id, or "inherit" — stays on the parent's provider, preserving prior behavior.
-func (e *Executor) resolveModel(ctx context.Context, requestModel, configModel, agentName string) (llm.Provider, string, error) {
+func (e *Executor) resolveModel(ctx context.Context, requestModel, configModel, agentName string, allowWrite bool) (llm.Provider, string, error) {
 	ref := strings.TrimSpace(requestModel)
-	var defaultRef string
+	var defaultRef, writeDefaultRef string
 	if ref == "" && e.subagentModelOverride != nil {
-		override, def := e.subagentModelOverride(agentName)
+		override, def, writeDef := e.subagentModelOverride(agentName)
 		ref = strings.TrimSpace(override)
 		defaultRef = strings.TrimSpace(def)
+		writeDefaultRef = strings.TrimSpace(writeDef)
 	}
 	if ref == "" {
 		ref = strings.TrimSpace(configModel)
 	}
 	// A concrete frontmatter value (not "" or "inherit") wins over the global
-	// default. Only when the frontmatter is absent or explicitly inherits do we
-	// fall back to the global default, so "inherit" still means "not this one".
-	if (ref == "" || ref == "inherit") && defaultRef != "" {
-		ref = defaultRef
+	// defaults. Only when the frontmatter is absent or explicitly inherits do we
+	// fall back to the global defaults, so "inherit" still means "not this one".
+	if ref == "" || ref == "inherit" {
+		// Write-enabled subagents prefer the dedicated write default before the
+		// plain global default, so a user can route write work to a stronger
+		// model while leaving read subagents on a cheaper one.
+		if allowWrite && writeDefaultRef != "" {
+			ref = writeDefaultRef
+		} else if defaultRef != "" {
+			ref = defaultRef
+		}
 	}
 	if ref == "" || ref == "inherit" {
 		return e.provider, e.parentModelID, nil

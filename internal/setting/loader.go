@@ -333,6 +333,19 @@ func UpdateSubagentDefaultModel(model string, userLevel bool) error {
 	})
 }
 
+// UpdateSubagentDefaultModelForWrite persists the global default model used by
+// write-enabled subagents (AllowWrite). "inherit"/"" clears it so write
+// subagents fall back to SubagentDefaultModel → parent model.
+func UpdateSubagentDefaultModelForWrite(model string, userLevel bool) error {
+	return updateSettingsFile(userLevel, func(d *Data) {
+		if model == "" || model == "inherit" {
+			d.SubagentDefaultModelForWrite = ""
+			return
+		}
+		d.SubagentDefaultModelForWrite = model
+	})
+}
+
 func UpdateSubagentModelAt(name, model string, userLevel bool) error {
 	return updateSettingsFile(userLevel, func(d *Data) {
 		if model == "" || model == "inherit" {

@@ -13,21 +13,24 @@ import (
 
 // AgentStoreData is the JSON structure for agents.json
 type AgentStoreData struct {
-	Disabled []string `json:"disabled"`
+	Disabled      []string `json:"disabled"`
+	WriteEnabled  []string `json:"write_enabled"`
 }
 
 // AgentStore handles persistence of agent enabled/disabled states
 type AgentStore struct {
-	mu       sync.RWMutex
-	path     string
-	disabled map[string]bool
+	mu           sync.RWMutex
+	path         string
+	disabled     map[string]bool
+	writeEnabled map[string]bool
 }
 
 // NewAgentStore creates a new store at the given path
 func NewAgentStore(path string) *AgentStore {
 	store := &AgentStore{
-		path:     path,
-		disabled: make(map[string]bool),
+		path:         path,
+		disabled:     make(map[string]bool),
+		writeEnabled: make(map[string]bool),
 	}
 	store.load()
 	return store
@@ -66,12 +69,22 @@ func (s *AgentStore) load() {
 	for _, name := range storeData.Disabled {
 		s.disabled[name] = true
 	}
+	s.writeEnabled = make(map[string]bool)
+	for _, name := range storeData.WriteEnabled {
+		s.writeEnabled[name] = true
+	}
 }
 
 // persistDisabled writes the disabled agent list to disk. Lock-free — operates
 // only on the provided snapshot.
 func persistDisabled(path string, disabled []string) error {
 	return atomicfile.WriteJSON(path, AgentStoreData{Disabled: disabled}, 0o644)
+}
+
+// persistWriteEnabled writes the write-enabled agent list to disk. Lock-free —
+// operates only on the provided snapshot.
+func persistWriteEnabled(path string, writeEnabled []string) error {
+	return atomicfile.WriteJSON(path, AgentStoreData{WriteEnabled: writeEnabled}, 0o644)
 }
 
 // IsDisabled returns whether an agent is disabled
@@ -108,5 +121,42 @@ func (s *AgentStore) GetDisabled() map[string]bool {
 
 	result := make(map[string]bool, len(s.disabled))
 	maps.Copy(result, s.disabled)
+	return result
+}
+
+// IsWriteEnabled returns whether an agent has been granted write permission
+// via the runtime store toggle. Default is false (read-only resolution); the
+// frontmatter allow_write flag is checked separately by the executor.
+func (s *AgentStore) IsWriteEnabled(name string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.writeEnabled[name]
+}
+
+// SetWriteEnabled sets the write-enabled state for an agent and persists to disk.
+func (s *AgentStore) SetWriteEnabled(name string, enabled bool) error {
+	s.mu.Lock()
+	if enabled {
+		s.writeEnabled[name] = true
+	} else {
+		delete(s.writeEnabled, name)
+	}
+	snapshot := make([]string, 0, len(s.writeEnabled))
+	for n := range s.writeEnabled {
+		snapshot = append(snapshot, n)
+	}
+	path := s.path
+	s.mu.Unlock()
+
+	return persistWriteEnabled(path, snapshot)
+}
+
+// GetWriteEnabled returns a copy of the write-enabled agents map
+func (s *AgentStore) GetWriteEnabled() map[string]bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make(map[string]bool, len(s.writeEnabled))
+	maps.Copy(result, s.writeEnabled)
 	return result
 }

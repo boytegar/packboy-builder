@@ -283,6 +283,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.StopAgentSession()
 		}
 		return m, nil
+	case input.AgentWriteToggleMsg:
+		// Same rationale as AgentToggleMsg: the write-enabled flag feeds the
+		// agent's tool permission gate and tool schemas, both frozen at agent
+		// build time. Stopping forces ensureAgentSession to rebuild on the
+		// next user turn so the running subagent picks up the new write
+		// permission. Guard on Stream.Active for the same orphan-safety
+		// reason; if mid-stream, leave it pending — the store is already
+		// persisted, so the next rebuild observes the updated flag.
+		if m.services.Agent.Active() && !m.conv.Stream.Active {
+			m.StopAgentSession()
+		}
+		return m, nil
 	case persistSessionDoneMsg:
 		if msg.err != nil {
 			log.Logger().Warn("async session persist failed", zap.Error(msg.err))

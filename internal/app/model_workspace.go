@@ -5,9 +5,14 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/boytegar/packboy-builder/internal/app/trigger"
+	"github.com/boytegar/packboy-builder/internal/confdir"
 	"github.com/boytegar/packboy-builder/internal/hook"
 	"github.com/boytegar/packboy-builder/internal/persona"
+	"github.com/boytegar/packboy-builder/internal/subagent"
 )
 
 func (m *model) changeCwd(newCwd string) {
@@ -49,6 +54,46 @@ func (m *model) reloadPersonasIfChanged(filePath string) {
 	m.applyPersonaSkills()
 	m.applyPersonaAgents()
 	m.ReconfigureAgentTool()
+}
+
+// reloadAgentsIfChanged re-scans agent definition directories when a Write/Edit
+// lands inside the user-level agents folder (~/.pcb/agents/). The registry
+// overwrites by name, so re-calling LoadAgents is safe; the next AgentDirectory
+// prompt section picks up new/changed definitions live. Best-effort: errors
+// are logged but never surface to the tool result.
+func (m *model) reloadAgentsIfChanged(filePath string) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	agentsDir := filepath.Join(confdir.Dir(homeDir), "agents")
+	rel, err := filepath.Rel(agentsDir, filePath)
+	if err != nil || rel == "" || filepath.IsAbs(rel) {
+		return
+	}
+	// Only reload for files under the agents dir (reject "../" escapes).
+	for _, part := range filepath.SplitList(rel) {
+		if part == ".." {
+			return
+		}
+	}
+	subagent.LoadAgents(m.env.CWD)
+}
+
+// enqueueMatchingSkills finds active skills whose name or description keywords
+// appear in the user's prompt and enqueues their full instructions as a
+// <system-reminder>. attachPendingReminders (called inside SubmitToAgent)
+// drains the queue and appends the content to the user message. This gives
+// the model the skill body without requiring an explicit Skill tool call —
+// a conservative auto-trigger that complements the skills directory.
+func (m *model) enqueueMatchingSkills(prompt string) {
+	if m.services.Skill == nil {
+		return
+	}
+	matches := m.services.Skill.MatchForPrompt(prompt)
+	for _, body := range matches {
+		m.services.Reminder.Enqueue(body)
+	}
 }
 
 func (m *model) applyStartupHookOutcome(outcome hook.HookOutcome) {

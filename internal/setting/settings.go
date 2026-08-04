@@ -90,6 +90,15 @@ type Data struct {
 	// Agent tool call override → SubagentModels entry → frontmatter → this
 	// default → parent conversation model.
 	SubagentDefaultModel string `json:"subagentDefaultModel,omitempty"`
+	// SubagentDefaultModelForWrite is the global default model for subagents
+	// that have write permission (AllowWrite=true or the /agent runtime toggle).
+	// It applies only when neither the Agent tool call, the SubagentModels
+	// per-name entry, nor the agent definition's frontmatter "model" field
+	// resolves to a concrete model — and the subagent is write-enabled.
+	// Resolution priority for a write subagent:
+	// Agent tool call override → SubagentModels entry → frontmatter →
+	// SubagentDefaultModelForWrite → SubagentDefaultModel → parent model.
+	SubagentDefaultModelForWrite string `json:"subagentDefaultModelForWrite,omitempty"`
 	// SubagentModels maps a subagent name to a model override, picked via the
 	// /models Subagents tab and persisted to settings.json. The value uses the
 	// same forms as the AGENT.md frontmatter "model" field: "inherit" or empty
@@ -843,6 +852,7 @@ func (s *Data) Clone() *Data {
 		dst.SkillDirs = append([]string(nil), s.SkillDirs...)
 	}
 	dst.SubagentDefaultModel = s.SubagentDefaultModel
+	dst.SubagentDefaultModelForWrite = s.SubagentDefaultModelForWrite
 	if s.SubagentModels != nil {
 		dst.SubagentModels = make(map[string]string, len(s.SubagentModels))
 		for k, v := range s.SubagentModels {

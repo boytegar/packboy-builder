@@ -314,6 +314,12 @@ type AgentConfig struct {
 	// PermissionMode is the default policy when no allow/deny rule matches.
 	PermissionMode PermissionMode `yaml:"mode" json:"mode"`
 
+	// AllowWrite, when true and no explicit mode is requested, upgrades the
+	// subagent to PermissionAcceptEdits so write/edit tools run without
+	// per-call confirmation. Explicit req.Mode (explore/edit) still wins.
+	// Set via frontmatter allow_write or the /agent screen runtime toggle.
+	AllowWrite bool `yaml:"allow_write,omitempty" json:"allow_write,omitempty"`
+
 	// AllowTools is the per-agent allow list. Same Tool(pattern) syntax as
 	// settings.permissions.allow. nil = all tools available; non-nil also
 	// acts as a schema filter (LLM only sees these tools).

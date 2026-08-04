@@ -91,16 +91,16 @@ func TestResolveModelUsesConfigBeforeParent(t *testing.T) {
 	executor := &Executor{parentModelID: "parent-model"}
 	ctx := context.Background()
 
-	if _, got, _ := executor.resolveModel(ctx, "", "", ""); got != "parent-model" {
+	if _, got, _ := executor.resolveModel(ctx, "", "", "", false); got != "parent-model" {
 		t.Fatalf("empty config model = %q, want parent", got)
 	}
-	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", ""); got != "claude-sonnet-4-6" {
+	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "", false); got != "claude-sonnet-4-6" {
 		t.Fatalf("config model = %q, want sonnet alias", got)
 	}
-	if _, got, _ := executor.resolveModel(ctx, "", "inherit", ""); got != "parent-model" {
+	if _, got, _ := executor.resolveModel(ctx, "", "inherit", "", false); got != "parent-model" {
 		t.Fatalf("inherit model = %q, want parent", got)
 	}
-	if _, got, _ := executor.resolveModel(ctx, "override-model", "sonnet", ""); got != "override-model" {
+	if _, got, _ := executor.resolveModel(ctx, "override-model", "sonnet", "", false); got != "override-model" {
 		t.Fatalf("request override = %q, want override", got)
 	}
 }
@@ -108,25 +108,25 @@ func TestResolveModelUsesConfigBeforeParent(t *testing.T) {
 func TestResolveModelSettingsOverrideBeatsConfig(t *testing.T) {
 	executor := &Executor{
 		parentModelID: "parent-model",
-		subagentModelOverride: func(name string) (string, string) {
+		subagentModelOverride: func(name string) (string, string, string) {
 			if name == "coder" {
-				return "haiku", ""
+				return "haiku", "", ""
 			}
-			return "", ""
+			return "", "", ""
 		},
 	}
 	ctx := context.Background()
 
 	// Override wins over frontmatter config.
-	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "coder"); got != "claude-haiku-4-5" {
+	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "coder", false); got != "claude-haiku-4-5" {
 		t.Fatalf("settings override = %q, want haiku", got)
 	}
 	// No override for this agent → frontmatter wins.
-	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "other"); got != "claude-sonnet-4-6" {
+	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "other", false); got != "claude-sonnet-4-6" {
 		t.Fatalf("no override = %q, want sonnet from frontmatter", got)
 	}
 	// Request override still wins over settings.
-	if _, got, _ := executor.resolveModel(ctx, "override-model", "sonnet", "coder"); got != "override-model" {
+	if _, got, _ := executor.resolveModel(ctx, "override-model", "sonnet", "coder", false); got != "override-model" {
 		t.Fatalf("request override = %q, want override", got)
 	}
 }
@@ -134,36 +134,70 @@ func TestResolveModelSettingsOverrideBeatsConfig(t *testing.T) {
 func TestResolveModelGlobalDefault(t *testing.T) {
 	executor := &Executor{
 		parentModelID: "parent-model",
-		subagentModelOverride: func(name string) (string, string) {
-			return "", "haiku" // no per-name override; global default = haiku
+		subagentModelOverride: func(name string) (string, string, string) {
+			return "", "haiku", "" // no per-name override; global default = haiku
 		},
 	}
 	ctx := context.Background()
 
 	// Empty frontmatter → global default applies.
-	if _, got, _ := executor.resolveModel(ctx, "", "", ""); got != "claude-haiku-4-5" {
+	if _, got, _ := executor.resolveModel(ctx, "", "", "", false); got != "claude-haiku-4-5" {
 		t.Fatalf("empty frontmatter + default = %q, want haiku", got)
 	}
 	// "inherit" frontmatter → global default applies (inherit means "not this one").
-	if _, got, _ := executor.resolveModel(ctx, "", "inherit", "researcher"); got != "claude-haiku-4-5" {
+	if _, got, _ := executor.resolveModel(ctx, "", "inherit", "researcher", false); got != "claude-haiku-4-5" {
 		t.Fatalf("inherit frontmatter + default = %q, want haiku", got)
 	}
 	// Concrete frontmatter wins over the global default.
-	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "coder"); got != "claude-sonnet-4-6" {
+	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "coder", false); got != "claude-sonnet-4-6" {
 		t.Fatalf("concrete frontmatter + default = %q, want sonnet", got)
 	}
 	// Per-name override wins over the global default.
 	executor2 := &Executor{
 		parentModelID: "parent-model",
-		subagentModelOverride: func(name string) (string, string) {
+		subagentModelOverride: func(name string) (string, string, string) {
 			if name == "coder" {
-				return "opus", "haiku"
+				return "opus", "haiku", ""
 			}
-			return "", "haiku"
+			return "", "haiku", ""
 		},
 	}
-	if _, got, _ := executor2.resolveModel(ctx, "", "", "coder"); got != "claude-opus-4-7" {
+	if _, got, _ := executor2.resolveModel(ctx, "", "", "coder", false); got != "claude-opus-4-7" {
 		t.Fatalf("per-name override + default = %q, want opus", got)
+	}
+}
+
+func TestResolveModelWriteDefault(t *testing.T) {
+	executor := &Executor{
+		parentModelID: "parent-model",
+		subagentModelOverride: func(name string) (string, string, string) {
+			// global default = haiku; write default = opus
+			return "", "haiku", "opus"
+		},
+	}
+	ctx := context.Background()
+
+	// Write-enabled subagent with empty frontmatter → write default (opus).
+	if _, got, _ := executor.resolveModel(ctx, "", "", "builder", true); got != "claude-opus-4-7" {
+		t.Fatalf("write subagent empty frontmatter = %q, want opus (write default)", got)
+	}
+	// Non-write subagent with empty frontmatter → plain default (haiku).
+	if _, got, _ := executor.resolveModel(ctx, "", "", "reader", false); got != "claude-haiku-4-5" {
+		t.Fatalf("non-write subagent empty frontmatter = %q, want haiku (plain default)", got)
+	}
+	// Concrete frontmatter wins over the write default.
+	if _, got, _ := executor.resolveModel(ctx, "", "sonnet", "builder", true); got != "claude-sonnet-4-6" {
+		t.Fatalf("write subagent concrete frontmatter = %q, want sonnet", got)
+	}
+	// No write default set → falls back to plain default.
+	executor2 := &Executor{
+		parentModelID: "parent-model",
+		subagentModelOverride: func(name string) (string, string, string) {
+			return "", "haiku", "" // no write default
+		},
+	}
+	if _, got, _ := executor2.resolveModel(ctx, "", "", "builder", true); got != "claude-haiku-4-5" {
+		t.Fatalf("write subagent no write default = %q, want haiku (plain default fallback)", got)
 	}
 }
 
@@ -189,7 +223,7 @@ func TestResolveModelRoutesQualifiedRefToResolver(t *testing.T) {
 	stub := &stubResolver{provider: stubProvider{}}
 	executor := &Executor{parentModelID: "parent-model", resolver: stub}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "", "", false)
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -204,7 +238,7 @@ func TestResolveModelRoutesQualifiedRefToResolver(t *testing.T) {
 func TestResolveModelQualifiedRefWithoutResolverInheritsParent(t *testing.T) {
 	executor := &Executor{parentModelID: "parent-model"} // no resolver wired
 
-	provider, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "", "")
+	provider, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "", "", false)
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -217,7 +251,7 @@ func TestResolveModelResolverErrorInheritsParent(t *testing.T) {
 	stub := &stubResolver{err: errors.New("provider \"deepseek\" is not connected")}
 	executor := &Executor{parentModelID: "parent-model", resolver: stub}
 
-	provider, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "", "")
+	provider, modelID, err := executor.resolveModel(context.Background(), "deepseek/deepseek-v4", "", "", false)
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -248,7 +282,7 @@ func TestResolveModelUnavailableOverrideInheritsParent(t *testing.T) {
 		parentModelID:      "gpt-5.6-sol",
 	}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "", "", false)
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -267,7 +301,7 @@ func TestResolveModelUnavailableParentProviderQualifiedOverrideInheritsParent(t 
 		parentModelID:      "gpt-5.6-sol",
 	}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "openai/nonexistent-model", "", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "openai/nonexistent-model", "", "", false)
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -285,7 +319,7 @@ func TestResolveModelEmptyCachedCatalogInheritsParent(t *testing.T) {
 		parentModelID:      "gpt-5.6-sol",
 	}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "", "", false)
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -306,7 +340,7 @@ func TestResolveModelAvailableOverrideIsPreserved(t *testing.T) {
 		parentModelID:      "gpt-5.6-sol",
 	}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "gpt-5.6-terra", "", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "gpt-5.6-terra", "", "", false)
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -318,7 +352,7 @@ func TestResolveModelAvailableOverrideIsPreserved(t *testing.T) {
 func TestResolveModelMissingCatalogLeavesOverrideUnverified(t *testing.T) {
 	executor := &Executor{provider: stubProvider{}, parentModelID: "gpt-5.6-sol"}
 
-	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "", "")
+	_, modelID, err := executor.resolveModel(context.Background(), "haiku", "", "", false)
 	if err != nil {
 		t.Fatalf("resolveModel() error: %v", err)
 	}
@@ -948,6 +982,77 @@ func TestRequestPermissionModeInheritanceAndNamedConfig(t *testing.T) {
 	}
 	if got := executor.requestPermissionMode(named, tool.AgentExecRequest{Agent: "reviewer", Mode: "edit"}); got != PermissionAcceptEdits {
 		t.Fatalf("named edit override = %q, want acceptEdits", got)
+	}
+}
+
+func TestRequestPermissionModeAllowWriteUpgrade(t *testing.T) {
+	executor := &Executor{}
+	executor.SetParentPermissionMode(func() PermissionMode { return PermissionDefault })
+
+	// AllowWrite via frontmatter upgrades a default-mode agent to accept-edits.
+	allowWrite := &AgentConfig{Name: "builder", PermissionMode: PermissionDefault, AllowWrite: true}
+	if got := executor.requestPermissionMode(allowWrite, tool.AgentExecRequest{Agent: "builder"}); got != PermissionAcceptEdits {
+		t.Fatalf("allow_write default mode = %q, want acceptEdits", got)
+	}
+	// Explicit explore mode wins over AllowWrite (read-only ceiling).
+	if got := executor.requestPermissionMode(allowWrite, tool.AgentExecRequest{Agent: "builder", Mode: "explore"}); got != PermissionExplore {
+		t.Fatalf("allow_write + explore override = %q, want explore", got)
+	}
+	// Explicit edit mode wins over AllowWrite (already acceptEdits).
+	if got := executor.requestPermissionMode(allowWrite, tool.AgentExecRequest{Agent: "builder", Mode: "edit"}); got != PermissionAcceptEdits {
+		t.Fatalf("allow_write + edit override = %q, want acceptEdits", got)
+	}
+	// Explicit frontmatter mode wins over AllowWrite (author's declared policy).
+	explicitMode := &AgentConfig{Name: "scout", PermissionMode: PermissionExplore, AllowWrite: true}
+	if got := executor.requestPermissionMode(explicitMode, tool.AgentExecRequest{Agent: "scout"}); got != PermissionExplore {
+		t.Fatalf("explicit explore + allow_write = %q, want explore", got)
+	}
+	// Without AllowWrite, default mode stays default.
+	plain := &AgentConfig{Name: "reader", PermissionMode: PermissionDefault}
+	if got := executor.requestPermissionMode(plain, tool.AgentExecRequest{Agent: "reader"}); got != PermissionDefault {
+		t.Fatalf("plain default mode = %q, want default", got)
+	}
+}
+
+func TestRequestPermissionModeStoreWriteToggle(t *testing.T) {
+	// Set up an isolated registry with a temp HOME so both user and project
+	// stores read/write under t.TempDir(), never touching the real ~/.pcb.
+	old := Default()
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	tmpCwd := t.TempDir()
+	storeOnly := NewRegistry()
+	if err := storeOnly.InitStores(tmpCwd); err != nil {
+		t.Fatalf("InitStores: %v", err)
+	}
+	storeOnly.Register(&AgentConfig{Name: "writer", PermissionMode: PermissionDefault})
+	SetDefaultRegistry(storeOnly)
+	t.Cleanup(func() { SetDefaultRegistry(old) })
+
+	executor := NewExecutor(nil, tmpCwd, "model", nil)
+	executor.SetParentPermissionMode(func() PermissionMode { return PermissionDefault })
+
+	// Before toggle: default mode.
+	cfg, ok := executor.resolveAgentConfig("writer")
+	if !ok {
+		t.Fatal("missing writer agent")
+	}
+	if got := executor.requestPermissionMode(cfg, tool.AgentExecRequest{Agent: "writer"}); got != PermissionDefault {
+		t.Fatalf("pre-toggle mode = %q, want default", got)
+	}
+
+	// Toggle write on at project level.
+	if err := Default().SetWriteEnabled("writer", true, false); err != nil {
+		t.Fatalf("SetWriteEnabled: %v", err)
+	}
+	cfg2, _ := executor.resolveAgentConfig("writer")
+	if got := executor.requestPermissionMode(cfg2, tool.AgentExecRequest{Agent: "writer"}); got != PermissionAcceptEdits {
+		t.Fatalf("post-toggle mode = %q, want acceptEdits", got)
+	}
+
+	// Explicit explore still wins over store toggle.
+	if got := executor.requestPermissionMode(cfg2, tool.AgentExecRequest{Agent: "writer", Mode: "explore"}); got != PermissionExplore {
+		t.Fatalf("store toggle + explore override = %q, want explore", got)
 	}
 }
 

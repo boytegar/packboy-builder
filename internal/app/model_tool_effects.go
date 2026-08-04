@@ -28,6 +28,7 @@ func (m *model) applyToolSideEffects(toolName string, sideEffect any) {
 		if filePath := kit.MapString(resp, "filePath"); filePath != "" {
 			m.fireFileChanged(filePath, toolName)
 			m.reloadPersonasIfChanged(filePath)
+			m.reloadAgentsIfChanged(filePath)
 			if m.env.FileCache != nil {
 				m.env.FileCache.Touch(filePath)
 			}

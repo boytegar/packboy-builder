@@ -140,6 +140,16 @@ func (m *env) GetModelDisplayName() string {
 	if id == "" {
 		return "no model selected"
 	}
+	return m.ModelDisplayName(id)
+}
+
+// ModelDisplayName resolves a model id (alias, bare id, or "vendor/model") to a
+// human-readable display name via the store's cached model list, falling back
+// to the raw id. Used for non-current models such as the default write model.
+func (m *env) ModelDisplayName(id string) string {
+	if id == "" {
+		return ""
+	}
 	if m.store == nil {
 		return id
 	}

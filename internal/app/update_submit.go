@@ -112,6 +112,10 @@ func (m *model) dispatchSubmission(raw string) tea.Cmd {
 	if m.imagesBlockedForModel(msg.Images) {
 		return tea.Batch(m.CommitMessages()...)
 	}
+	// Auto-invoke matching active skills: enqueue their full instructions as
+	// a <system-reminder> so the model can use them without an explicit
+	// Skill tool call. Conservative match on name/description keywords.
+	m.enqueueMatchingSkills(raw)
 	msg.AutopilotNote = autopilotNote
 	m.conv.Append(msg)
 	m.userInput.Reset()

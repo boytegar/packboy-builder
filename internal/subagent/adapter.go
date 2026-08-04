@@ -103,5 +103,6 @@ func ToAgentConfigInfo(c *AgentConfig) tool.AgentConfigInfo {
 		Tools:          tools,
 		SourceFile:     c.SourceFile,
 		Source:         c.Source,
+		AllowWrite:     c.AllowWrite,
 	}
 }

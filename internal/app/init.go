@@ -235,6 +235,14 @@ func (a *agentRegistryAdapter) SetEnabled(name string, enabled bool, userLevel b
 	return a.reg.SetEnabled(name, enabled, userLevel)
 }
 
+func (a *agentRegistryAdapter) GetWriteEnabledAt(userLevel bool) map[string]bool {
+	return a.reg.GetWriteEnabledAt(userLevel)
+}
+
+func (a *agentRegistryAdapter) SetWriteEnabled(name string, enabled bool, userLevel bool) error {
+	return a.reg.SetWriteEnabled(name, enabled, userLevel)
+}
+
 func skillCommandInfos() []command.Info {
 	return input.SkillCommandInfos()
 }

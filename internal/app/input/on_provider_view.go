@@ -96,7 +96,7 @@ func (s *ProviderSelector) renderItemList(sb *strings.Builder) {
 			sb.WriteString(s.renderProviderRow(item, isSelected, i))
 		case providerItemAuthMethod:
 			sb.WriteString(s.renderAuthMethod(item, isSelected, i))
-		case providerItemSubagent, providerItemSubagentDefault:
+		case providerItemSubagent, providerItemSubagentDefault, providerItemSubagentDefaultWrite:
 			sb.WriteString(s.renderSubagentRow(item, isSelected))
 		}
 		sb.WriteString("\n")

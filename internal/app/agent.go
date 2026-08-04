@@ -85,8 +85,8 @@ func (m *model) personaPrompt() system.Persona {
 // any new infrastructure.
 func swarmPersonaOverlay() system.Persona {
 	return system.Persona{
-		Behavior: "Swarm mode is active. For any non-trivial request, you MUST decompose the work into independent subtasks and dispatch them in parallel via the Agent tool in a single message (do not run them sequentially). Pick the right subagent for each subtask (e.g. researcher for investigation, test-agent for verification). Synthesize their results into the final answer. For trivial questions that need no decomposition, answer directly.",
-		Rules:    "Never execute a multi-step task single-threaded when it can be split into parallel subtasks. Each subagent call must have a self-contained prompt with all context it needs. Wait for all parallel subagents before synthesizing. If a subtask depends on another's output, run the dependent one after the first completes.",
+		Behavior: "Swarm mode is active. For any non-trivial request, you MUST decompose the work into independent subtasks and dispatch them in parallel via the Agent tool in a single message (do not run them sequentially). Pick the right subagent for each subtask (e.g. researcher for investigation, test-agent for verification). Synthesize their results into the final answer. For trivial questions that need no decomposition, answer directly.\n\nFor any investigation that touches more than 1-2 files, traces call paths, or answers architecture/where-does-X-live questions, you MUST delegate to a `researcher` subagent (mode=explore) instead of reading/grepping yourself. You only receive the subagent's summary. The exception is a single direct Read/Grep when the exact file and target are already known.\n\nIf no existing agent definition fits a subtask's need, first create one in the global user folder: write `~/.pcb/agents/<name>/AGENT.md` via the Write tool with YAML frontmatter (`name`, `description`, `model: inherit`, `max_steps`) and a purposeful system prompt body. Then dispatch the new agent via the Agent tool in the same turn. Prefer the global `~/.pcb/agents/` over project `.pcb/agents/` for reusable agents.",
+		Rules:    "Never execute a multi-step task single-threaded when it can be split into parallel subtasks. Each subagent call must have a self-contained prompt with all context it needs. Wait for all parallel subagents before synthesizing. If a subtask depends on another's output, run the dependent one after the first completes.\n\nNever use your own Read/Grep/Glob for multi-file exploration in ModeSwarm — dispatch a researcher. Each delegation prompt must be self-contained with all context.\n\nWhen creating a new agent on the fly, keep the system prompt self-contained and specific to the subtask. After writing the file, reload is automatic — do not ask the user to restart.",
 	}
 }
 
@@ -701,18 +701,19 @@ func (m *model) ReconfigureAgentTool() {
 
 	executor := subagent.NewExecutor(m.env.LLMProvider, m.env.CWD, m.env.GetModelID(), m.services.Hook)
 	executor.SetResolver(llm.NewProviderPool(m.services.LLM.Store()))
-	executor.SetSubagentModelOverride(func(name string) (string, string) {
+	executor.SetSubagentModelOverride(func(name string) (string, string, string) {
 		if s := m.services.Setting; s != nil {
 			snap := s.Snapshot()
-			return snap.SubagentModels[name], snap.SubagentDefaultModel
+			return snap.SubagentModels[name], snap.SubagentDefaultModel, snap.SubagentDefaultModelForWrite
 		}
-		return "", ""
+		return "", "", ""
 	})
 	if m.services.Session.GetStore() != nil && m.services.Session.ID() != "" {
 		executor.SetSessionStore(m.services.Session.GetStore(), m.services.Session.ID())
 	}
 	executor.SetProjectInstructions(m.env.CachedProjectInstructions)
 	executor.SetSkillsDirectory(m.services.Skill.PromptSection())
+	executor.SetSkillMatcher(m.services.Skill)
 	executor.SetMCPDependencies(m.services.MCP, m.services.MCP)
 	executor.SetDisabledTools(m.services.Setting.DisabledTools())
 

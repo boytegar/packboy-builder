@@ -269,6 +269,84 @@ Test instructions.
 	}
 }
 
+func TestMatchForPrompt(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillDir := filepath.Join(tmpDir, ".pcb", "skills", "commit")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	skillPath := filepath.Join(skillDir, "SKILL.md")
+	skillContent := `---
+name: commit
+description: create a git commit
+---
+
+Commit instructions.
+`
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second skill that should not match generic prompts.
+	skillDir2 := filepath.Join(tmpDir, ".pcb", "skills", "reviewer")
+	if err := os.MkdirAll(skillDir2, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	skillPath2 := filepath.Join(skillDir2, "SKILL.md")
+	skillContent2 := `---
+name: reviewer
+description: review code changes
+---
+
+Review instructions.
+`
+	if err := os.WriteFile(skillPath2, []byte(skillContent2), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader := &loader{cwd: tmpDir}
+	skills, err := loader.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll failed: %v", err)
+	}
+	userStore := &Store{path: filepath.Join(tmpDir, "u.json"), states: make(map[string]SkillState)}
+	projectStore := &Store{path: filepath.Join(tmpDir, "p.json"), states: make(map[string]SkillState)}
+	registry := &Registry{skills: skills, userStore: userStore, projectStore: projectStore, cwd: tmpDir}
+
+	// Set both to active so MatchForPrompt considers them.
+	if err := registry.SetState("commit", StateActive, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.SetState("reviewer", StateActive, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Match by skill name "commit" appearing in the prompt — but use a
+	// prompt that contains no words from the reviewer skill's description
+	// ("review", "code", "changes") to keep it unambiguous.
+	matches := registry.MatchForPrompt("please commit my latest work")
+	if len(matches) != 1 {
+		t.Fatalf("name match: got %d matches, want 1", len(matches))
+	}
+
+	// Match by description keyword "review" for the reviewer skill.
+	matches = registry.MatchForPrompt("can you review this pull request?")
+	if len(matches) != 1 {
+		t.Fatalf("description match: got %d matches, want 1", len(matches))
+	}
+
+	// No match for a prompt mentioning neither skill's keywords.
+	matches = registry.MatchForPrompt("what is the weather today")
+	if len(matches) != 0 {
+		t.Fatalf("no-match: got %d matches, want 0", len(matches))
+	}
+
+	// Empty prompt returns nil.
+	if matches := registry.MatchForPrompt(""); matches != nil {
+		t.Fatalf("empty prompt: got %v, want nil", matches)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
 }

@@ -157,6 +157,59 @@ func (r *Registry) GetDisabledAt(userLevel bool) map[string]bool {
 	return make(map[string]bool)
 }
 
+// IsWriteEnabled returns whether an agent has been granted write permission via
+// the runtime store toggle. Default is false (falls back to normal permission
+// resolution). A frontmatter allow_write flag is checked separately.
+func (r *Registry) IsWriteEnabled(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	lowerName := strings.ToLower(name)
+	// Project-level store takes priority over user-level.
+	if r.projectStore != nil && r.projectStore.IsWriteEnabled(lowerName) {
+		return true
+	}
+	if r.userStore != nil && r.userStore.IsWriteEnabled(lowerName) {
+		return true
+	}
+	return false
+}
+
+// SetWriteEnabled sets the write-enabled state for an agent at the specified
+// level and persists it. Used by internal/app's agentRegistryAdapter.
+func (r *Registry) SetWriteEnabled(name string, enabled bool, userLevel bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lowerName := strings.ToLower(name)
+	if userLevel {
+		if r.userStore != nil {
+			return r.userStore.SetWriteEnabled(lowerName, enabled)
+		}
+	} else {
+		if r.projectStore != nil {
+			return r.projectStore.SetWriteEnabled(lowerName, enabled)
+		}
+	}
+	return nil
+}
+
+// GetWriteEnabledAt returns the write-enabled agents from the specified level.
+// Used by internal/app's agentRegistryAdapter.
+func (r *Registry) GetWriteEnabledAt(userLevel bool) map[string]bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if userLevel {
+		if r.userStore != nil {
+			return r.userStore.GetWriteEnabled()
+		}
+	} else {
+		if r.projectStore != nil {
+			return r.projectStore.GetWriteEnabled()
+		}
+	}
+	return make(map[string]bool)
+}
+
 // LoadPersona restricts the visible agent set to an allow-list while a persona
 // is active: only the named agents are spawnable and shown in the agents
 // directory. An empty/blank list clears the restriction (all agents visible).

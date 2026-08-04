@@ -64,6 +64,20 @@ func (s *ProviderSelector) rebuildSubagentsAgentList() {
 		Subagent: &tool.AgentConfigInfo{Name: "Default model", Model: defaultEffective},
 	})
 
+	// Second row: the default model for write-enabled subagents (AllowWrite).
+	// Falls back to the plain default's effective value when unset so the row
+	// reads as "inherit → <default>" rather than a bare inherit.
+	writeDefaultEffective := "inherit"
+	if s.settings != nil {
+		if d := strings.TrimSpace(s.settings.Snapshot().SubagentDefaultModelForWrite); d != "" {
+			writeDefaultEffective = d
+		}
+	}
+	s.visibleItems = append(s.visibleItems, providerListItem{
+		Kind:     providerItemSubagentDefaultWrite,
+		Subagent: &tool.AgentConfigInfo{Name: "Default model for write", Model: writeDefaultEffective},
+	})
+
 	for i := range configs {
 		c := &configs[i]
 		if c.Name == "" {
@@ -184,10 +198,15 @@ func (s *ProviderSelector) parentProviderNameForSubagents() llm.Name {
 func (s *ProviderSelector) clearSubagentOverride() tea.Cmd {
 	name := s.subSelected
 	isDefault := name == ""
+	isDefaultWrite := name == "\x00write" // sentinel for the write-default slot
 	s.subAgentPhase = 0
 	s.subSelected = ""
 	s.active = false
 	return func() tea.Msg {
+		if isDefaultWrite {
+			_ = setting.UpdateSubagentDefaultModelForWrite("inherit", true)
+			return subagentModelSavedMsg{AgentName: "Default model for write", Model: "inherit"}
+		}
 		if isDefault {
 			_ = setting.UpdateSubagentDefaultModel("inherit", true)
 			return subagentModelSavedMsg{AgentName: "Default model", Model: "inherit"}
@@ -211,8 +230,11 @@ func (s *ProviderSelector) renderSubagentRow(item providerListItem, isSelected b
 	}
 	line := fmt.Sprintf("%s %s", indicator, name)
 	desc := strings.TrimSpace(c.Description)
-	if item.Kind == providerItemSubagentDefault {
+	switch item.Kind {
+	case providerItemSubagentDefault:
 		desc = "fallback for inherit/empty rows"
+	case providerItemSubagentDefaultWrite:
+		desc = "model for write-enabled (AllowWrite) subagents"
 	}
 	if desc != "" {
 		const prefixAndGap = 4
@@ -241,6 +263,9 @@ func (s *ProviderSelector) handleSubagentSelect() tea.Cmd {
 		if item.Kind == providerItemSubagentDefault {
 			return s.selectSubagent("") // "" marks the global default slot
 		}
+		if item.Kind == providerItemSubagentDefaultWrite {
+			return s.selectSubagent("\x00write") // sentinel marks the write-default slot
+		}
 		if item.Kind != providerItemSubagent || item.Subagent == nil {
 			return nil
 		}
@@ -253,10 +278,15 @@ func (s *ProviderSelector) handleSubagentSelect() tea.Cmd {
 	name := s.subSelected
 	ref := s.subagentModelRef(item.Model)
 	isDefault := name == ""
+	isDefaultWrite := name == "\x00write"
 	s.active = false
 	s.subAgentPhase = 0
 	s.subSelected = ""
 	return func() tea.Msg {
+		if isDefaultWrite {
+			_ = setting.UpdateSubagentDefaultModelForWrite(ref, true)
+			return subagentModelSavedMsg{AgentName: "Default model for write", Model: ref}
+		}
 		if isDefault {
 			_ = setting.UpdateSubagentDefaultModel(ref, true)
 			return subagentModelSavedMsg{AgentName: "Default model", Model: ref}
@@ -284,16 +314,22 @@ func (s *ProviderSelector) handleSubagentBack() bool {
 }
 
 // subagentsTabActive reports whether the Subagents tab should be rendered
-// (registry wired and at least one agent exists).
+// (registry wired). The tab always shows when an agent registry is connected,
+// even before any agent configs exist, so the "Default model" and
+// "Default model for write" rows remain reachable for pre-configuring the
+// global fallbacks.
 func (s *ProviderSelector) subagentsTabActive() bool {
-	return s.agentRegistry != nil && len(s.agentRegistry.ListConfigs()) > 0
+	return s.agentRegistry != nil
 }
 
 // subagentPhaseLabel is the small header shown above the model list in phase 1.
 func (s *ProviderSelector) subagentPhaseLabel() string {
 	name := s.subSelected
-	if name == "" {
+	switch name {
+	case "":
 		name = "Default model"
+	case "\x00write":
+		name = "Default model for write"
 	}
 	return kit.DimStyle().PaddingLeft(2).Render(
 		fmt.Sprintf("Pick model for %s — Enter saves · i inherit · ← back", name))

@@ -177,10 +177,31 @@ func (e *Executor) requestPermissionMode(config *AgentConfig, req tool.AgentExec
 		if strings.TrimSpace(req.Agent) == "" || config.displayOnly {
 			return e.currentParentPermissionMode()
 		}
-		return NormalizePermissionMode(string(config.PermissionMode))
+		// An explicit frontmatter mode (explore/acceptEdits/bypass) is the
+		// agent author's declared policy and wins over the soft AllowWrite
+		// upgrade. AllowWrite only upgrades the default/empty case.
+		if normalized := NormalizePermissionMode(string(config.PermissionMode)); normalized != "" && normalized != PermissionDefault {
+			return normalized
+		}
+		// AllowWrite (frontmatter allow_write or runtime /agent toggle) upgrades
+		// an otherwise-default agent to accept-edits so write tools run without
+		// per-call confirmation.
+		if config.AllowWrite || e.isWriteEnabled(config.Name) {
+			return PermissionAcceptEdits
+		}
+		return PermissionDefault
 	default:
 		return PermissionMode(strings.TrimSpace(req.Mode))
 	}
+}
+
+// isWriteEnabled checks the runtime store toggle (set via the /agent screen).
+// Returns false when no registry is wired (headless/tests).
+func (e *Executor) isWriteEnabled(name string) bool {
+	if e.registry == nil || strings.TrimSpace(name) == "" {
+		return false
+	}
+	return e.registry.IsWriteEnabled(name)
 }
 
 func displayAgentName(name string, mode PermissionMode) string {

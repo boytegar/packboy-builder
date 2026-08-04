@@ -206,6 +206,7 @@ type OperationModeParams struct {
 	InputTokens       int
 	InputLimit        int
 	ModelName         string
+	WriteModelName    string // default model for write-enabled subagents (swarm); shown when set and distinct from ModelName
 	StatusMessage     string
 	ConversationCost  llm.CostTotal
 	Compressions      int  // session compact count, drives the "compacted ×N" badge
@@ -281,8 +282,14 @@ func renderStatusCluster(p OperationModeParams) string {
 	segments := []statusSegment{
 		{text: muted.Render(p.ModelName), priority: 1},
 	}
+	if p.WriteModelName != "" && p.WriteModelName != p.ModelName {
+		segments = append(segments, statusSegment{
+			text:     muted.Render("✎ " + p.WriteModelName),
+			priority: 2,
+		})
+	}
 	if p.StatusMessage != "" {
-		segments = append(segments, statusSegment{text: muted.Render(p.StatusMessage), priority: 2})
+		segments = append(segments, statusSegment{text: muted.Render(p.StatusMessage), priority: 3})
 	}
 
 	// The numeric label always renders — it falls back to "ctx X/--" when the

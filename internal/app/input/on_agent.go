@@ -16,6 +16,8 @@ type AgentRegistry interface {
 	ListConfigs() []tool.AgentConfigInfo
 	GetDisabledAt(userLevel bool) map[string]bool
 	SetEnabled(name string, enabled bool, userLevel bool) error
+	GetWriteEnabledAt(userLevel bool) map[string]bool
+	SetWriteEnabled(name string, enabled bool, userLevel bool) error
 }
 
 // agentTab identifies a category tab in the agent selector. The values double
@@ -37,12 +39,19 @@ type agentItem struct {
 	Source         string // "built-in", "user", "project", "plugin"
 	PluginName     string // populated when Source == "plugin" or name has "ns:" prefix
 	Enabled        bool
+	WriteEnabled   bool
 }
 
 // AgentToggleMsg is sent when an agent's enabled state is toggled.
 type AgentToggleMsg struct {
 	AgentName string
 	Enabled   bool
+}
+
+// AgentWriteToggleMsg is sent when an agent's write-enabled state is toggled.
+type AgentWriteToggleMsg struct {
+	AgentName    string
+	WriteEnabled bool
 }
 
 // AgentSelector holds the state for the agent selector overlay. The tab/filter/
@@ -67,7 +76,7 @@ func NewAgentSelector(reg AgentRegistry) AgentSelector {
 			preferred:   []int{int(agentTabProject), int(agentTabUser), int(agentTabBuiltin)},
 			noun:        "agents",
 			placeholder: "Type to filter agents...",
-			hints:       []string{"↑/↓ navigate", "Enter toggle", "←/→/Tab switch tab", "Esc cancel"},
+			hints:       []string{"↑/↓ navigate", "Enter toggle", "w toggle write", "←/→/Tab switch tab", "Esc cancel"},
 			matchesTab:  agentMatchesTab,
 			searchKeys:  func(a agentItem) []string { return []string{a.Name, a.Description} },
 			nav:         kit.ListNav{MaxVisible: 10},
@@ -81,6 +90,10 @@ func (s *AgentSelector) EnterSelect(width, height int) error {
 	disabledByLevel := map[bool]map[string]bool{
 		false: s.registry.GetDisabledAt(false),
 		true:  s.registry.GetDisabledAt(true),
+	}
+	writeByLevel := map[bool]map[string]bool{
+		false: s.registry.GetWriteEnabledAt(false),
+		true:  s.registry.GetWriteEnabledAt(true),
 	}
 
 	agents := make([]agentItem, 0, len(allConfigs))
@@ -103,6 +116,7 @@ func (s *AgentSelector) EnterSelect(width, height int) error {
 			Source:         source,
 			PluginName:     pluginName,
 			Enabled:        !disabledByLevel[userLevel][lowerName],
+			WriteEnabled:   cfg.AllowWrite || writeByLevel[userLevel][lowerName],
 		})
 	}
 
@@ -174,7 +188,32 @@ func (s *AgentSelector) Toggle() tea.Cmd {
 	}
 }
 
+// ToggleWrite flips the selected agent's write-enabled state (read-only ↔
+// write without confirmation) and persists it to the same store level as
+// the enable/disable toggle.
+func (s *AgentSelector) ToggleWrite() tea.Cmd {
+	if len(s.list.filtered) == 0 || s.list.nav.Selected >= len(s.list.filtered) {
+		return nil
+	}
+	selected := &s.list.filtered[s.list.nav.Selected]
+	selected.WriteEnabled = !selected.WriteEnabled
+	for i := range s.list.items {
+		if s.list.items[i].Name == selected.Name {
+			s.list.items[i].WriteEnabled = selected.WriteEnabled
+			break
+		}
+	}
+	_ = s.registry.SetWriteEnabled(selected.Name, selected.WriteEnabled, s.saveLevelForActiveTab())
+	return func() tea.Msg {
+		return AgentWriteToggleMsg{AgentName: selected.Name, WriteEnabled: selected.WriteEnabled}
+	}
+}
+
 func (s *AgentSelector) HandleKeypress(key tea.KeyMsg) tea.Cmd {
+	switch key.String() {
+	case "w", "W":
+		return s.ToggleWrite()
+	}
 	return s.list.handleKey(key, s.Toggle)
 }
 
@@ -218,6 +257,14 @@ func (s *AgentSelector) renderItemList(sb *strings.Builder, panel kit.Panel) {
 			statusStyle = kit.SelectorStatusNone()
 		}
 
+		// Write badge: ✎ when write-enabled, empty otherwise.
+		var writeIcon string
+		var writeStyle lipgloss.Style
+		if a.WriteEnabled {
+			writeIcon = "✎"
+			writeStyle = lipgloss.NewStyle().Foreground(kit.CurrentTheme.Accent)
+		}
+
 		// Pad by display width, not bytes: one CJK agent name would otherwise
 		// shift the model, mode and badge columns on that row only.
 		name := kit.TruncateText(a.Name, maxNameLen)
@@ -258,6 +305,9 @@ func (s *AgentSelector) renderItemList(sb *strings.Builder, panel kit.Panel) {
 			paddedMode,
 			descStyle.Render(tools),
 		)
+		if writeIcon != "" {
+			line += " " + writeStyle.Render(writeIcon)
+		}
 		if badgeText != "" {
 			line += " " + badge.Render(badgeText)
 		}

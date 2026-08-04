@@ -156,6 +156,7 @@ type frontmatterAliases struct {
 	AllowedTools   ToolList       `yaml:"allowed-tools"`
 	PermissionMode PermissionMode `yaml:"permission-mode"`
 	MaxSteps       int            `yaml:"max_steps"`
+	AllowWrite     bool           `yaml:"allow-write"`
 }
 
 func (a frontmatterAliases) applyTo(config *AgentConfig) {
@@ -171,6 +172,9 @@ func (a frontmatterAliases) applyTo(config *AgentConfig) {
 	}
 	if config.MaxSteps <= 0 && a.MaxSteps > 0 {
 		config.MaxSteps = a.MaxSteps
+	}
+	if !config.AllowWrite && a.AllowWrite {
+		config.AllowWrite = a.AllowWrite
 	}
 }
 
