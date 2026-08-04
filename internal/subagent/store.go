@@ -13,8 +13,8 @@ import (
 
 // AgentStoreData is the JSON structure for agents.json
 type AgentStoreData struct {
-	Disabled      []string `json:"disabled"`
-	WriteEnabled  []string `json:"write_enabled"`
+	Disabled     []string `json:"disabled"`
+	WriteEnabled []string `json:"write_enabled"`
 }
 
 // AgentStore handles persistence of agent enabled/disabled states
