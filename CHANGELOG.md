@@ -3,6 +3,18 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v1.22.7] - 2026-08-04
+
+### Added
+- Add `AllowWrite` subagent mode (frontmatter `allow_write` + `/agent` runtime toggle) that upgrades eligible subagents to accept-edits permission without per-call confirmation.
+- Add `SubagentDefaultModelForWrite` setting and the default-write row in `/models → Subagents` so write-enabled subagents route to a stronger model.
+- Auto-inject matching active skills into delegation prompts and user messages so skills run without an explicit Skill tool call.
+- Live-reload agent definitions under `~/.pcb/agents/` when a Write/Edit lands in the agents folder.
+
+### Changed
+- Expand the swarm persona overlay with researcher-delegation and on-the-fly agent-creation rules.
+- Strengthen the skills-section guidance to invoke a matching skill before other approaches.
+
 ## [v1.22.6] - 2026-08-03
 
 ### Added
