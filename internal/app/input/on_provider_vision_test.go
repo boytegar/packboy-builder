@@ -2,7 +2,6 @@ package input
 
 import (
 	"testing"
-
 )
 
 // TestVisionTabRebuildPhase0 verifies the Vision tab phase 0 produces a single

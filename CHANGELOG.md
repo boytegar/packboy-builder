@@ -3,6 +3,17 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v1.22.8] - 2026-08-05
+
+### Added
+- Add a designated vision-model pre-pass so text-only main models can act on pasted or referenced images. When `VisionModel` is set, images route to it first, its text analysis merges into the prompt as a system-reminder, and pixels are stripped before the main agent sees the turn. Configured via a new **Vision** tab in `/models` (`visionModel` setting: `vendor/model`, a bare model id, or `inherit`/empty to disable).
+- Add `llm.AnalyzeImages` with a vision pre-processor prompt and a 60s timeout.
+- Hot-swap the model of live subagent runs from `/models → Subagents` without close/reopen; the swap takes effect at the next inference step and conversation is preserved.
+- Add `llm.Client.SetModel` / `SetProvider` with token-limit cache reset so swapped models re-resolve their limits.
+
+### Changed
+- Refactor image tokens from generic `[Image #N]` to filename-derived badges `[<truncated-name> #N]` (e.g. `iniga-.png #2`), shown both inline and on a new above-textarea badge line. `@path` file-suggestions that resolve to an image now become inline image tokens instead of plain-text paths. The legacy `[Image #N]` token shape still parses for backward compatibility.
+
 ## [v1.22.7] - 2026-08-04
 
 ### Added
