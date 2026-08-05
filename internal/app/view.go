@@ -275,6 +275,14 @@ func (m model) renderChatSection(activeContent, trackerView string) string {
 		parts = append(parts, spinnerView)
 	}
 
+	if m.conv.AnalyzingImages {
+		spinnerView := conv.ThinkingStyle.Render(m.conv.Spinner.View() + " Analyzing image...")
+		if len(parts) > 0 {
+			spinnerView = "\n" + spinnerView
+		}
+		parts = append(parts, spinnerView)
+	}
+
 	if compactView := conv.RenderCompactStatus(m.env.Width, m.conv.Spinner.View(), m.conv.Compact); compactView != "" {
 		parts = append(parts, compactView)
 	}

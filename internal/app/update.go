@@ -373,6 +373,7 @@ func (m *model) needsSpinner() bool {
 	return m.conv.Stream.Active ||
 		m.conv.Compact.Active ||
 		m.userInput.Provider.FetchingLimits ||
+		m.conv.AnalyzingImages ||
 		m.hasRunningBackgroundTask()
 }
 

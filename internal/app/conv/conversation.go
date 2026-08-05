@@ -21,6 +21,7 @@ type ConversationModel struct {
 	Compact        CompactState
 	Modal          ModalState
 	Tool           ToolExecState
+	AnalyzingImages bool
 }
 
 func NewConversation() ConversationModel {

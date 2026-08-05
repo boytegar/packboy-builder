@@ -131,7 +131,8 @@ func (m *model) dispatchSubmission(raw string) tea.Cmd {
 		msg.AutopilotNote = autopilotNote
 		m.pendingVisionMsg = &msg
 		m.userInput.Reset()
-		return m.visionPrePassCmd(msg.Images)
+		m.conv.AnalyzingImages = true
+		return tea.Batch(m.visionPrePassCmd(msg.Images), m.SpinnerTickCmd())
 	}
 	// Hold the turn (keeping the input) if it carries images the active model
 	// can't accept, rather than letting the provider reject the request.
@@ -226,6 +227,7 @@ func (m *model) visionPrePassCmd(images []core.Image) tea.Cmd {
 func (m *model) handleVisionAnalysis(msg visionAnalysisMsg) tea.Cmd {
 	pending := m.pendingVisionMsg
 	m.pendingVisionMsg = nil
+	m.conv.AnalyzingImages = false
 	if pending == nil {
 		return nil
 	}
