@@ -19,6 +19,10 @@ import (
 type ToolExecState struct {
 	PendingCalls []core.ToolCall
 	CurrentIdx   int
+	// Completed tracks which pending call IDs have finished. Required for
+	// out-of-order completion under parallel batches — CurrentIdx alone
+	// assumes sequential finish order and would clear the batch early.
+	Completed map[string]bool
 	// StartedAt stamps when each call began executing (its PreToolEvent),
 	// keyed by tool-call ID. The view reads it to show a live elapsed timer
 	// on a running row, so a long command no longer looks stuck. Only
@@ -61,12 +65,14 @@ func (t *ToolExecState) Reset() {
 func (t *ToolExecState) Track(calls []core.ToolCall) {
 	t.StartedAt = nil
 	t.Progress = nil
+	t.Completed = nil
 	if len(calls) == 0 {
 		t.ClearPending()
 		return
 	}
 	t.PendingCalls = append([]core.ToolCall(nil), calls...)
 	t.CurrentIdx = 0
+	t.Completed = make(map[string]bool, len(calls))
 }
 
 func (t *ToolExecState) MarkCurrent(toolCallID string) {
@@ -110,43 +116,60 @@ func (t *ToolExecState) IndexOf(toolCallID string) int {
 }
 
 func (t *ToolExecState) MarkComplete(toolCallID string) bool {
-	completedIdx := -1
-	for i, tc := range t.PendingCalls {
+	if len(t.PendingCalls) == 0 {
+		return false
+	}
+	found := false
+	for _, tc := range t.PendingCalls {
 		if tc.ID == toolCallID {
-			completedIdx = i
+			found = true
 			break
 		}
 	}
-	if completedIdx == -1 {
+	if !found {
 		return false
 	}
-
-	batchComplete := completedIdx >= len(t.PendingCalls)-1
-	if batchComplete {
-		t.ClearPending()
-		return true
+	if t.Completed == nil {
+		t.Completed = make(map[string]bool, len(t.PendingCalls))
 	}
-	t.CurrentIdx = completedIdx + 1
-	return false
+	t.Completed[toolCallID] = true
+	// Advance sequential spinner cursor past consecutive finished calls.
+	for t.CurrentIdx < len(t.PendingCalls) && t.Completed[t.PendingCalls[t.CurrentIdx].ID] {
+		t.CurrentIdx++
+	}
+	if len(t.Completed) < len(t.PendingCalls) {
+		return false
+	}
+	t.ClearPending()
+	return true
 }
 
 func (t *ToolExecState) ClearPending() {
 	t.PendingCalls = nil
 	t.CurrentIdx = 0
+	t.Completed = nil
 }
 
 // DrainPendingCalls cancels the current context and returns any remaining
-// pending tool calls (from CurrentIdx onward), then resets state.
+// unfinished tool calls (order preserved), then resets state. Under parallel
+// batches mid-batch completions are tracked via Completed, so we must not
+// slice from CurrentIdx alone.
 func (t *ToolExecState) DrainPendingCalls() []core.ToolCall {
 	if t.Cancel != nil {
 		t.Cancel()
 	}
-	if t.PendingCalls == nil || t.CurrentIdx >= len(t.PendingCalls) {
+	if t.PendingCalls == nil {
 		return nil
 	}
-	calls := t.PendingCalls[t.CurrentIdx:]
+	var remaining []core.ToolCall
+	for _, tc := range t.PendingCalls {
+		if t.Completed != nil && t.Completed[tc.ID] {
+			continue
+		}
+		remaining = append(remaining, tc)
+	}
 	t.Reset()
-	return calls
+	return remaining
 }
 
 // --- Tool execution dispatching ---

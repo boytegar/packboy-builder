@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 - Expand the swarm persona overlay with researcher-delegation and on-the-fly agent-creation rules.
 - Strengthen the skills-section guidance to invoke a matching skill before other approaches.
+- Tool batches partition parallel-safe calls (read-only + Agent/SendMessage) from side-effecting ones, so mixed Agent+Read/Bash no longer serializes behind the agent; PreTool stamps at real start for per-call timers; UI MarkComplete tracks out-of-order finishes.
 
 ## [v1.22.6] - 2026-08-03
 

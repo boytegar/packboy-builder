@@ -493,9 +493,14 @@ func (a *agent) conversationTextLen() int {
 }
 
 // execTools runs tool calls in three phases:
-//  1. Resolve — emit PreTool event, look up tool
-//  2. Execute — parallel for read-only batches, sequential when side effects are possible
+//  1. Resolve — look up tool (unknown tools short-circuit with an error result)
+//  2. Execute — parallel-safe calls (read-only + agent-spawn) fan out immediately;
+//     side-effecting calls run sequentially in original order, concurrent with
+//     the parallel-safe group so an Agent does not block a Read/Bash sibling
 //  3. Record results — sequential, in original call order
+//
+// PreTool is emitted at the start of each call's Execute (not at batch resolve)
+// so UI timers reflect real per-call start times under mixed batches.
 //
 // Permission checking is handled by the tool decorator (tool.WithPermission),
 // not by the agent. See docs/concepts/permission-model.md.
@@ -505,9 +510,10 @@ func (a *agent) execTools(ctx context.Context, calls []ToolCall) int {
 		if ctx.Err() != nil {
 			break
 		}
-		a.emit(ctx, PreToolEvent(tc))
 		t := a.tools.Get(tc.Name)
 		if t == nil {
+			// Emit PreTool so the UI still sees the unknown call, then fail it.
+			a.emit(ctx, PreToolEvent(tc))
 			a.appendResult(tc, fmt.Sprintf("unknown tool: %s", tc.Name), true)
 			continue
 		}
@@ -517,27 +523,45 @@ func (a *agent) execTools(ctx context.Context, calls []ToolCall) int {
 		return 0
 	}
 
-	// Phase 2: Execute (parallel only for read-only batches). The sequential
-	// path re-checks ctx between calls — nothing obliges a tool to consult ctx
-	// before doing its work, so without it an Esc during the first of three
-	// Edits still applied the other two.
+	// Phase 2: partition + execute. Serial tasks re-check ctx between calls —
+	// nothing obliges a tool to consult ctx before doing its work, so without
+	// it an Esc during the first of three Edits still applied the other two.
 	results := make([]toolTaskOutput, len(tasks))
-	if len(tasks) == 1 || !canExecuteToolBatchInParallel(tasks) {
-		for i, t := range tasks {
-			if ctx.Err() != nil {
-				results[i] = toolTaskOutput{"", ctx.Err()}
-				continue
-			}
-			results[i] = executeToolTask(ctx, t)
-		}
+	if len(tasks) == 1 {
+		results[0] = a.executeToolTask(ctx, tasks[0])
 	} else {
-		var wg sync.WaitGroup
+		var parallelIdx, serialIdx []int
 		for i, t := range tasks {
+			if isParallelSafeToolCall(t.call.Name) {
+				parallelIdx = append(parallelIdx, i)
+			} else {
+				serialIdx = append(serialIdx, i)
+			}
+		}
+
+		var wg sync.WaitGroup
+		for _, i := range parallelIdx {
 			wg.Add(1)
-			go func(i int, t agentToolTask) {
+			go func(i int) {
 				defer wg.Done()
-				results[i] = executeToolTask(ctx, t)
-			}(i, t)
+				results[i] = a.executeToolTask(ctx, tasks[i])
+			}(i)
+		}
+		// Side-effecting tools keep original order among themselves, but run
+		// in their own goroutine so they do not stall parallel-safe siblings
+		// (Agent + Read, Agent + Bash, etc.).
+		if len(serialIdx) > 0 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for _, i := range serialIdx {
+					if ctx.Err() != nil {
+						results[i] = toolTaskOutput{"", ctx.Err()}
+						continue
+					}
+					results[i] = a.executeToolTask(ctx, tasks[i])
+				}
+			}()
 		}
 		wg.Wait()
 	}
@@ -568,35 +592,27 @@ func (a *agent) execTools(ctx context.Context, calls []ToolCall) int {
 	return toolUses
 }
 
-func executeToolTask(ctx context.Context, t agentToolTask) (result toolTaskOutput) {
+func (a *agent) executeToolTask(ctx context.Context, t agentToolTask) (result toolTaskOutput) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("core/agent: tool %s panicked: %v\n%s", t.call.Name, r, debug.Stack())
 			result = toolTaskOutput{"", fmt.Errorf("tool %s panicked: %v", t.call.Name, r)}
 		}
 	}()
+	// Stamp PreTool at real start so each row's elapsed timer is independent
+	// under mixed/parallel batches (not the batch-resolve wall clock).
+	a.emit(ctx, PreToolEvent(t.call))
 	params, _ := ParseToolInput(t.call.Input)
 	execCtx := WithToolCallID(ctx, t.call.ID)
 	content, err := t.tool.Execute(execCtx, params)
 	return toolTaskOutput{content, err}
 }
 
-// canExecuteToolBatchInParallel permits two batch shapes: all read-only
-// calls, or all agent-spawning calls. Agent calls are independent workers
-// with their own permission gates — running them concurrently is the point
-// of launching several at once; mixed batches stay sequential because
-// side-effect ordering against other tools is unknown.
-func canExecuteToolBatchInParallel(tasks []agentToolTask) bool {
-	readOnly, agents := true, true
-	for _, t := range tasks {
-		if !isReadOnlyToolCall(t.call.Name) {
-			readOnly = false
-		}
-		if !isAgentSpawnToolCall(t.call.Name) {
-			agents = false
-		}
-	}
-	return readOnly || agents
+// isParallelSafeToolCall reports tools that may fan out with siblings. Read-
+// only tools have no side-effect ordering constraints; agent-spawn tools are
+// independent workers. Everything else serializes among itself.
+func isParallelSafeToolCall(name string) bool {
+	return isReadOnlyToolCall(name) || isAgentSpawnToolCall(name)
 }
 
 func isReadOnlyToolCall(name string) bool {

@@ -78,8 +78,13 @@ func mergeNotices(notices []mainNotice) mainNotice {
 // is omitted and only the output-file pointer is given, so a large report is
 // fetched in one deliberate read rather than a truncated preview plus a second
 // read for the rest. Byte-sized, so a CJK report (3 bytes/char) inlines up to
-// roughly a third as many characters — ~6.6K.
-const maxTaskOutputInNotification = 20000
+// roughly a third as many characters — ~13.3K.
+//
+// Raised from 20000 to 40000: background subagent summaries are the parent's
+// only view of what the subagent did, and degrading to a file pointer forces a
+// second round-trip just to read the result. 40 KB is still well under a turn's
+// context budget for an inlined report.
+const maxTaskOutputInNotification = 40000
 
 // taskCompletionMessage builds the broker message a finished task sends to the
 // "main" address, or (_, false) if the task is not in a terminal state.

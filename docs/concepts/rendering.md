@@ -164,7 +164,11 @@ State that drives it:
   Ctrl-O. Collapsed = preview + line count; expanded = full content.
 - **Error** — `ToolResult.IsError` flips the icon ✓ → ✗ and tints the result.
 - **Parallel mode** — when multiple tool calls run in parallel, each
-  call shows its own progress.
+  call shows its own progress. `PreTool` is emitted at each call's real
+  start (not batch resolve), so elapsed timers stay independent under
+  mixed Agent + read-only batches. `ToolExecState.Completed` tracks
+  out-of-order finishes so completing the last-indexed call early does
+  not clear the batch.
 
 The pairing between an assistant's tool calls and their result messages
 is precomputed by `PrecomputeInlinedResults(messages)` and lives on
