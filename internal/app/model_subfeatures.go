@@ -6,6 +6,7 @@
 package app
 
 import (
+	"context"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -118,6 +119,18 @@ func (m *model) overlayDeps() input.OverlayDeps {
 		SetActivePersona:        m.setActivePersona,
 		OpenPersona:             m.openPersona,
 		DeletePersona:           m.deletePersona,
+		SwapSubagentModels: func(ctx context.Context, agentName, modelRef string) int {
+			if m.agentExecutor == nil {
+				return 0
+			}
+			return m.agentExecutor.SwapRunModelByName(ctx, agentName, modelRef)
+		},
+		ReloadSettings: func() error {
+			if m.services.Setting == nil {
+				return nil
+			}
+			return m.services.Setting.Reload(m.env.CWD)
+		},
 	}
 }
 

@@ -32,6 +32,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/app/trigger"
 	"github.com/boytegar/packboy-builder/internal/core"
 	"github.com/boytegar/packboy-builder/internal/setting"
+	"github.com/boytegar/packboy-builder/internal/subagent"
 	"github.com/boytegar/packboy-builder/internal/tool/evolve"
 )
 
@@ -96,6 +97,14 @@ type model struct {
 	// the mode indicator shows "thinking…" instead of a transcript notice.
 	autopilotDeciding bool
 
+	// pendingVisionMsg holds the user message deferred for a vision pre-pass.
+	// When images are present and a VisionModel is configured, dispatchSubmission
+	// stashes the built message here, strips the images, and emits an async
+	// llm.AnalyzeImages cmd. On completion (visionAnalysisMsg), the analysis is
+	// enqueued as a reminder, the message is appended + submitted, and this is
+	// cleared. Nil when no vision pre-pass is in flight.
+	pendingVisionMsg *core.ChatMessage
+
 	// autopilotRecoveries counts consecutive attempts to revive a run after a
 	// turn died on an error, bounding a retry loop into a sustained outage. Any
 	// turn that reaches OnTurnEnd resets it.
@@ -135,6 +144,12 @@ type model struct {
 	// a stopped agent. The snapshot is cleared only after a replacement starts,
 	// or explicitly by ResetAgentSession when the conversation itself changes.
 	agentRestartMessages []core.Message
+
+	// agentExecutor is the current subagent executor handle, stored so a
+	// /models → Subagents tab save can hot-swap the model of live subagent
+	// runs without closing/reopening them. Replaced wholesale by
+	// ReconfigureAgentTool on provider/model/settings changes.
+	agentExecutor *subagent.ExecutorAdapter
 
 	// Streaming blocks render their markdown off the UI goroutine so a completed
 	// block never stalls repaint. See flushState and model_scrollback.go.

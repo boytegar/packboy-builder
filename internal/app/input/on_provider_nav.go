@@ -62,24 +62,31 @@ func (s *ProviderSelector) switchTab(t providerTab) {
 }
 
 // providerTabCount reports how many tabs are rendered, so tab cycling wraps
-// correctly whether or not the Subagents tab is available (it is hidden until
-// an agent registry is wired and at least one agent exists).
+// correctly whether or not the Subagents/Vision tabs are available. Vision is
+// always available; Subagents is hidden until an agent registry is wired.
 func (s *ProviderSelector) providerTabCount() int {
+	count := 2 // Models + Providers
 	if s.subagentsTabActive() {
-		return 3
+		count++
 	}
-	return 2
+	if s.visionTabActive() {
+		count++
+	}
+	return count
 }
 
 func (s *ProviderSelector) NextTab() {
 	s.switchTab(providerTab((int(s.activeTab) + 1) % s.providerTabCount()))
 }
 func (s *ProviderSelector) PrevTab() {
-	s.switchTab(providerTab((int(s.activeTab) + 1 + s.providerTabCount()) % s.providerTabCount()))
+	s.switchTab(providerTab((int(s.activeTab) + s.providerTabCount() - 1) % s.providerTabCount()))
 }
 
 func (s *ProviderSelector) GoBack() bool {
 	if s.handleSubagentBack() {
+		return true
+	}
+	if s.handleVisionBack() {
 		return true
 	}
 	if s.customFormActive {
@@ -213,7 +220,10 @@ func (s *ProviderSelector) HandleKeypress(key tea.KeyMsg) tea.Cmd {
 		if cmd := s.handleSubagentInheritKey(); cmd != nil {
 			return cmd
 		}
-		// Not on the Subagents tab phase 1: fall through to typed-text capture.
+		if cmd := s.handleVisionInheritKey(); cmd != nil {
+			return cmd
+		}
+		// Not on a phase-1 pick tab: fall through to typed-text capture.
 
 	default:
 		// Typed text capture: every printable rune is search input. Navigation
@@ -249,6 +259,8 @@ func (s *ProviderSelector) Select() tea.Cmd {
 	switch s.activeTab {
 	case providerTabSubagents:
 		return s.handleSubagentSelect()
+	case providerTabVision:
+		return s.handleVisionSelect()
 	}
 	switch item.Kind {
 	case providerItemModel:

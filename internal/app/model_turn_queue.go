@@ -131,6 +131,12 @@ func (m *model) injectNotice(n mainNotice) tea.Cmd {
 	if n.Content == "" {
 		return tea.Batch(m.CommitMessages()...)
 	}
+	// Persist the notice body as a user message so it survives agent/session
+	// rebuilds via conv.ConvertToProvider(). Without this, only the Recorder
+	// sees it and any rebuild path that seeds from conv drops the notice —
+	// the parent agent then loses the subagent's summary on restart. Matches
+	// injectCronPrompt / injectAsyncHookContinuation.
+	m.conv.Append(core.ChatMessage{Role: core.RoleUser, Content: n.Content})
 	return m.SubmitToAgent(n.Content, nil)
 }
 

@@ -81,6 +81,12 @@ func (a *ExecutorAdapter) GetParentModelID() string {
 	return a.Executor.GetParentModelID()
 }
 
+// SwapRunModelByName hot-swaps the model of matching live subagent runs. See
+// Executor.SwapRunModelByName for semantics.
+func (a *ExecutorAdapter) SwapRunModelByName(ctx context.Context, agentName, modelRef string) int {
+	return a.Executor.SwapRunModelByName(ctx, agentName, modelRef)
+}
+
 // GetAgentConfig returns configuration for an optional agent name.
 func (a *ExecutorAdapter) GetAgentConfig(name string) (tool.AgentConfigInfo, bool) {
 	info, _, ok := a.ResolveAgentSelection(name)

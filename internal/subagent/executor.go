@@ -53,6 +53,14 @@ type Executor struct {
 	disabledToolsMu            sync.RWMutex
 	disabledTools              map[string]bool // effective global disabled tools, copied on set/read
 
+	// runsMu guards liveRuns, the registry of in-flight runs keyed by their
+	// broker address (TaskID for background, hookID for foreground). A run is
+	// registered while executePreparedRun is active so SwapRunModel can find
+	// and hot-swap its client without rebuilding the agent or losing the
+	// conversation.
+	runsMu   sync.RWMutex
+	liveRuns map[string]*preparedRun
+
 	// subagentModelOverride resolves per-subagent and global default model
 	// overrides from settings.json (set via the /models Subagents tab). It
 	// returns the per-name override, the global default, and the write-default
@@ -419,7 +427,7 @@ func (e *Executor) fireSubagentStart(req tool.AgentExecRequest, agentHookID stri
 	})
 }
 
-func (e *Executor) buildAgent(ctx context.Context, run *preparedRun, onToolExec func(string, map[string]any), onEvent func(core.Event)) (core.Agent, func(), error) {
+func (e *Executor) buildAgent(ctx context.Context, run *preparedRun, onToolExec func(string, map[string]any), onEvent func(core.Event)) (core.Agent, *llm.Client, func(), error) {
 	rc := run.cfg
 	agentCwd := run.cwd
 	cleanup := func() {}
@@ -493,7 +501,7 @@ func (e *Executor) buildAgent(ctx context.Context, run *preparedRun, onToolExec 
 		OnEvent:     onEvent,
 	})
 
-	return ag, cleanup, nil
+	return ag, llmClient, cleanup, nil
 }
 
 // subagentCompactFunc summarizes the conversation on the run's own model so

@@ -93,3 +93,71 @@ func TestMarkToolCallCompleteAdvancesAndClearsPendingState(t *testing.T) {
 		t.Fatalf("CurrentIdx = %d, want 0", state.CurrentIdx)
 	}
 }
+
+// Out-of-order completion (tc-2 before tc-1) must not clear the batch early —
+// that was the parallel-mode bug where finishing the last-indexed call wiped
+// pending state while earlier calls were still running.
+func TestMarkToolCallCompleteOutOfOrder(t *testing.T) {
+	state := ToolExecState{}
+	state.Track([]core.ToolCall{
+		{ID: "tc-1", Name: "Agent"},
+		{ID: "tc-2", Name: "Read"},
+	})
+
+	if complete := state.MarkComplete("tc-2"); complete {
+		t.Fatal("completing last-indexed call first must not finish the batch")
+	}
+	if len(state.PendingCalls) != 2 {
+		t.Fatalf("PendingCalls length = %d, want 2", len(state.PendingCalls))
+	}
+	// Cursor stays on tc-1 until it completes.
+	if state.CurrentIdx != 0 {
+		t.Fatalf("CurrentIdx = %d, want 0 (tc-1 still running)", state.CurrentIdx)
+	}
+
+	if complete := state.MarkComplete("tc-1"); !complete {
+		t.Fatal("batch must complete once every call is done")
+	}
+	if state.PendingCalls != nil {
+		t.Fatalf("PendingCalls = %#v, want nil", state.PendingCalls)
+	}
+}
+
+func TestDrainPendingCallsSkipsAlreadyCompleted(t *testing.T) {
+	state := ToolExecState{}
+	state.Track([]core.ToolCall{
+		{ID: "tc-1", Name: "Agent"},
+		{ID: "tc-2", Name: "Read"},
+		{ID: "tc-3", Name: "Bash"},
+	})
+	state.MarkComplete("tc-2")
+
+	remaining := state.DrainPendingCalls()
+	if len(remaining) != 2 {
+		t.Fatalf("remaining = %d, want 2 (tc-1, tc-3)", len(remaining))
+	}
+	if remaining[0].ID != "tc-1" || remaining[1].ID != "tc-3" {
+		t.Fatalf("remaining IDs = %s,%s want tc-1,tc-3", remaining[0].ID, remaining[1].ID)
+	}
+	if state.PendingCalls != nil {
+		t.Fatalf("state not reset after drain: %#v", state.PendingCalls)
+	}
+}
+
+func TestPostToolOutOfOrderDoesNotDrainEarly(t *testing.T) {
+	m := NewModel(80)
+	m.Tool.Track([]core.ToolCall{{ID: "tc-1", Name: "Agent"}, {ID: "tc-2", Name: "Read"}})
+	rt := &postToolRuntime{}
+
+	applyPostTool(rt, &m, core.PostToolEvent(core.ToolResult{ToolCallID: "tc-2", ToolName: "Read"}))
+	if rt.drainCalls != 0 {
+		t.Fatalf("drained after out-of-order first completion; calls = %d", rt.drainCalls)
+	}
+	if len(m.Tool.PendingCalls) != 2 {
+		t.Fatalf("PendingCalls cleared early: len=%d", len(m.Tool.PendingCalls))
+	}
+	applyPostTool(rt, &m, core.PostToolEvent(core.ToolResult{ToolCallID: "tc-1", ToolName: "Agent"}))
+	if rt.drainCalls != 1 {
+		t.Fatalf("drain calls after full batch = %d, want 1", rt.drainCalls)
+	}
+}

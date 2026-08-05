@@ -495,46 +495,114 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timeout waiting for: %s", what)
 }
 
-func TestCanExecuteToolBatchInParallelOnlyAllowsReadOnlyTools(t *testing.T) {
+func TestIsParallelSafeToolCall(t *testing.T) {
 	tests := []struct {
-		name  string
-		tasks []agentToolTask
-		want  bool
+		name string
+		want bool
 	}{
-		{
-			name: "all read only",
-			tasks: []agentToolTask{
-				{call: ToolCall{Name: "Read"}},
-				{call: ToolCall{Name: "WebFetch"}},
-				{call: ToolCall{Name: "WebSearch"}},
-			},
-			want: true,
-		},
-		{
-			name: "edit serializes batch",
-			tasks: []agentToolTask{
-				{call: ToolCall{Name: "Read"}},
-				{call: ToolCall{Name: "Edit"}},
-			},
-			want: false,
-		},
-		{
-			name: "bash serializes batch",
-			tasks: []agentToolTask{
-				{call: ToolCall{Name: "Bash"}},
-				{call: ToolCall{Name: "Read"}},
-			},
-			want: false,
-		},
+		{"Read", true},
+		{"WebFetch", true},
+		{"WebSearch", true},
+		{"LSP", true},
+		{"Agent", true},
+		{"SendMessage", true},
+		{"Edit", false},
+		{"Bash", false},
+		{"Write", false},
+		{"TaskUpdate", false},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := canExecuteToolBatchInParallel(tt.tasks); got != tt.want {
-				t.Fatalf("canExecuteToolBatchInParallel() = %v, want %v", got, tt.want)
+			if got := isParallelSafeToolCall(tt.name); got != tt.want {
+				t.Fatalf("isParallelSafeToolCall(%q) = %v, want %v", tt.name, got, tt.want)
 			}
 		})
 	}
+}
+
+// Mixed Agent+Read batches must not serialize the whole batch: the Read
+// must start while the Agent is still running (the original bug — non-agent
+// tools waited on the agent timer/exec).
+func TestMixedAgentAndReadBatchRunsInParallel(t *testing.T) {
+	var (
+		agentStarted = make(chan struct{})
+		readStarted  = make(chan struct{})
+		releaseAgent = make(chan struct{})
+		ran          atomic.Int32
+		dead         atomic.Int32
+	)
+
+	ag := NewAgent(Config{
+		ID: "test", LLM: &mixedBatchLLM{}, System: NewSystem(),
+		Tools: NewTools(
+			cancelOnRunTool{name: "Agent", ran: &ran, ranOnDead: &dead, onRun: func() {
+				close(agentStarted)
+				<-releaseAgent
+			}},
+			cancelOnRunTool{name: "Read", ran: &ran, ranOnDead: &dead, onRun: func() {
+				// Either order is fine; both must be able to start concurrently.
+				select {
+				case <-agentStarted:
+				case <-time.After(2 * time.Second):
+				}
+				close(readStarted)
+			}},
+		),
+	}).(*agent)
+	go func() {
+		for range ag.Outbox() {
+		}
+	}()
+	ag.append(Message{Role: RoleUser, Content: "go"})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = ag.ThinkAct(context.Background())
+	}()
+
+	// Wait until Read has started — proves it did not queue behind Agent.
+	select {
+	case <-readStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Read did not start while Agent was in-flight; mixed batch still serial")
+	}
+	close(releaseAgent)
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("ThinkAct did not finish")
+	}
+	if n := ran.Load(); n != 2 {
+		t.Fatalf("ran = %d, want 2", n)
+	}
+}
+
+// mixedBatchLLM returns one Agent + one Read once, then ends the turn.
+type mixedBatchLLM struct {
+	calls atomic.Int32
+}
+
+func (m *mixedBatchLLM) InputLimit() int { return 0 }
+func (m *mixedBatchLLM) Infer(context.Context, InferRequest) (<-chan Chunk, error) {
+	ch := make(chan Chunk, 1)
+	if m.calls.Add(1) == 1 {
+		ch <- Chunk{Done: true, Response: &InferResponse{
+			StopReason: StopToolUse,
+			ToolCalls: []ToolCall{
+				{ID: "c1", Name: "Agent", Input: "{}"},
+				{ID: "c2", Name: "Read", Input: "{}"},
+			},
+		}}
+	} else {
+		ch <- Chunk{Done: true, Response: &InferResponse{
+			Content:    "done",
+			StopReason: StopEndTurn,
+		}}
+	}
+	close(ch)
+	return ch, nil
 }
 
 // The turn loop must recognize the tag the llm layer attaches, not the

@@ -267,6 +267,8 @@ func (s *ProviderSelector) rebuildVisibleItems() {
 		s.rebuildProvidersTab()
 	case providerTabSubagents:
 		s.rebuildSubagentsTab()
+	case providerTabVision:
+		s.rebuildVisionTab()
 	}
 
 	s.clampSelection()

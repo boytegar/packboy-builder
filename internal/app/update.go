@@ -179,6 +179,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case autopilotDecisionMsg:
 		// The TurnEnd steer's continue/stop verdict came back.
 		return m, m.handleAutopilotDecision(msg)
+	case visionAnalysisMsg:
+		// The vision pre-pass's image analysis came back; resume the deferred turn.
+		return m, m.handleVisionAnalysis(msg)
 	case autopilotQuestionMsg:
 		// The Question steer's answer (or defer) came back.
 		return m, m.handleAutopilotQuestion(msg)

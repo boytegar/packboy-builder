@@ -21,7 +21,7 @@ const completeMaxAttempts = 3
 // It also provides streaming and completion methods for the loop/app layer,
 // plus cumulative token usage tracking.
 //
-// SetThinking can be called while the agent is running.
+// SetThinking and SetModel can be called while the agent is running.
 // Changes take effect on the next Infer/Stream call.
 type Client struct {
 	mu             sync.RWMutex
@@ -33,10 +33,10 @@ type Client struct {
 
 	// Token limits resolve from the provider's ListModels, which is a live
 	// network round-trip for OpenAI-compatible providers (Anthropic/Google
-	// cache it internally). A client's model is fixed for its lifetime, so the
-	// resolved limits are memoized here to keep ListModels off the
-	// per-inference-step hot path (InputLimit for compaction, output cap for
-	// every Infer/Stream).
+	// cache it internally). Limits are memoized per model so ListModels stays
+	// off the per-inference-step hot path (InputLimit for compaction, output
+	// cap for every Infer/Stream). SetModel resets the cache so the next call
+	// re-resolves for the new model instead of returning the old limits.
 	inLimit  cachedLimit
 	outLimit cachedLimit
 }
@@ -60,6 +60,15 @@ func (c *cachedLimit) get(p Provider, model string, resolve func(Provider, strin
 		c.value = resolve(p, model)
 	}
 	return c.value
+}
+
+// reset clears the memoized limit so the next get re-resolves via resolve.
+// Called by SetModel/SetProvider since the cached value belongs to the old
+// model/provider and is invalid after a swap.
+func (c *cachedLimit) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.value = 0
 }
 
 // NewClient wraps an existing provider as a core.LLM with streaming and
@@ -139,6 +148,34 @@ func (l *Client) SetThinkingEffort(effort string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.thinkingEffort = effort
+}
+
+// SetModel hot-swaps the model on a live client. The next Infer/Stream/Complete
+// call uses the new model — no rebuild, conversation preserved. Token-limit
+// caches are reset because they memoize the previous model's limits.
+//
+// Same-vendor swaps (e.g. sonnet→opus within Anthropic) are always safe.
+// Cross-vendor swaps mid-run may need message sanitization because thinking
+// and tool-call block formats differ across vendors; prefer SetProvider for
+// those and do it at a step boundary.
+func (l *Client) SetModel(model string) {
+	l.mu.Lock()
+	l.model = model
+	l.mu.Unlock()
+	l.inLimit.reset()
+	l.outLimit.reset()
+}
+
+// SetProvider hot-swaps both the provider and model on a live client. Used for
+// cross-vendor model swaps (a bare SetModel cannot route to a different
+// vendor). The next call uses the new provider/model; limits are reset.
+func (l *Client) SetProvider(p Provider, model string) {
+	l.mu.Lock()
+	l.provider = p
+	l.model = model
+	l.mu.Unlock()
+	l.inLimit.reset()
+	l.outLimit.reset()
 }
 
 // ThinkingEffort returns the current native thinking/reasoning effort value.

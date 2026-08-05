@@ -165,7 +165,8 @@ func RenderUserMessage(content, displayContent string, images []core.Image, mdRe
 	if len(images) > 0 {
 		imgParts := make([]string, 0, len(images))
 		for i := range images {
-			imgParts = append(imgParts, PendingImageStyle.Render(fmt.Sprintf("[Image #%d]", i+1)))
+			imgParts = append(imgParts, PendingImageStyle.Render(
+				fmt.Sprintf("[%s #%d]", kit.TruncateFilenameKeepExt(images[i].FileName, 5), i+1)))
 		}
 		imageLabel := strings.Join(imgParts, " ")
 		if displayContent != "" {

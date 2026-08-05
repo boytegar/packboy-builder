@@ -39,6 +39,10 @@ func (s *ProviderSelector) Render() string {
 		body.WriteString(s.subagentPhaseLabel())
 		body.WriteString("\n\n")
 	}
+	if s.activeTab == providerTabVision && s.visionAgentPhase() == 1 {
+		body.WriteString(s.visionPhaseLabel())
+		body.WriteString("\n\n")
+	}
 	if len(s.visibleItems) == 0 {
 		body.WriteString(s.emptyFilterMsg())
 		body.WriteString("\n")
@@ -71,6 +75,9 @@ func (s *ProviderSelector) emptyFilterMsg() string {
 		}
 		return kit.DimStyle().PaddingLeft(2).Render("No subagents match the filter")
 	}
+	if s.activeTab == providerTabVision {
+		return kit.DimStyle().PaddingLeft(2).Render("No models match the filter")
+	}
 	return kit.DimStyle().PaddingLeft(2).Render("No providers match the filter")
 }
 
@@ -98,6 +105,8 @@ func (s *ProviderSelector) renderItemList(sb *strings.Builder) {
 			sb.WriteString(s.renderAuthMethod(item, isSelected, i))
 		case providerItemSubagent, providerItemSubagentDefault, providerItemSubagentDefaultWrite:
 			sb.WriteString(s.renderSubagentRow(item, isSelected))
+		case providerItemVisionDefault:
+			sb.WriteString(s.renderVisionRow(item, isSelected))
 		}
 		sb.WriteString("\n")
 
@@ -155,6 +164,12 @@ func (s *ProviderSelector) renderTabs() string {
 			name string
 			tab  providerTab
 		}{"Subagents", providerTabSubagents})
+	}
+	if s.visionTabActive() {
+		tabs = append(tabs, struct {
+			name string
+			tab  providerTab
+		}{"Vision", providerTabVision})
 	}
 
 	var parts []string

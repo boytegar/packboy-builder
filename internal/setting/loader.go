@@ -346,6 +346,20 @@ func UpdateSubagentDefaultModelForWrite(model string, userLevel bool) error {
 	})
 }
 
+// UpdateVisionModel persists the designated vision model used to pre-analyze
+// images before the main agent sees the turn. "inherit"/"" clears it (images
+// go to the main model directly; text-only models block as before); an alias,
+// a bare model id, or "vendor/model" sets it.
+func UpdateVisionModel(model string, userLevel bool) error {
+	return updateSettingsFile(userLevel, func(d *Data) {
+		if model == "" || model == "inherit" {
+			d.VisionModel = ""
+			return
+		}
+		d.VisionModel = model
+	})
+}
+
 func UpdateSubagentModelAt(name, model string, userLevel bool) error {
 	return updateSettingsFile(userLevel, func(d *Data) {
 		if model == "" || model == "inherit" {

@@ -751,6 +751,12 @@ func TestTabSwitchesBetweenTabs(t *testing.T) {
 		t.Fatal("Providers tab should show provider items")
 	}
 
+	// Press Tab again to cycle to the Vision tab (always present).
+	m.HandleKeypress(tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.activeTab != providerTabVision {
+		t.Fatal("Tab should switch to Vision tab")
+	}
+
 	// Press Tab again to go back to Models
 	m.HandleKeypress(tea.KeyPressMsg{Code: tea.KeyTab})
 	if m.activeTab != providerTabModels {

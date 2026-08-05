@@ -107,6 +107,16 @@ type Data struct {
 	// "vendor/model" routes to another connected provider. Resolution priority:
 	// Agent tool call override → this settings entry → frontmatter → parent.
 	SubagentModels map[string]string `json:"subagentModels,omitempty"`
+	// VisionModel is the designated model used to pre-analyze images pasted or
+	// referenced in the chat input before the main agent sees the turn. When set,
+	// images are sent to this model (resolved via "vendor/model" or a bare id),
+	// its text analysis is merged into the user's prompt as a system-reminder,
+	// and the images are stripped — allowing a text-only main model to act on
+	// image content. Empty = no vision pre-pass (the main model must handle
+	// images itself, and text-only models block as before). Uses the same forms
+	// as SubagentDefaultModel: "inherit"/"" = unset; "vendor/model" or a bare
+	// model id. (JSON key "visionModel".)
+	VisionModel string `json:"visionModel,omitempty"`
 	// LastOperationMode is the user-wide mode restored when starting a new session.
 	LastOperationMode string `json:"lastOperationMode,omitempty"`
 	// SkillDirs lists extra directories to scan for skills (SKILL.md files).
@@ -853,6 +863,7 @@ func (s *Data) Clone() *Data {
 	}
 	dst.SubagentDefaultModel = s.SubagentDefaultModel
 	dst.SubagentDefaultModelForWrite = s.SubagentDefaultModelForWrite
+	dst.VisionModel = s.VisionModel
 	if s.SubagentModels != nil {
 		dst.SubagentModels = make(map[string]string, len(s.SubagentModels))
 		for k, v := range s.SubagentModels {

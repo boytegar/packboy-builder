@@ -87,6 +87,27 @@ func TruncateKeepEnd(text string, maxLen int) string {
 	return "…" + string(runes[i:])
 }
 
+// TruncateFilenameKeepExt shortens a filename to its first prefixLen runes + "-"
+// + the original extension (dot included). e.g. prefixLen=5:
+// "inigambarsaya.png" → "iniga-.png". Names with no extension get just the
+// truncated stem + "-". Names already within the budget are returned unchanged.
+// Operates on runes so multi-byte filenames are not split mid-glyph.
+func TruncateFilenameKeepExt(name string, prefixLen int) string {
+	if name == "" || prefixLen <= 0 {
+		return name
+	}
+	ext := ""
+	if dot := strings.LastIndexByte(name, '.'); dot >= 0 && dot > 0 {
+		ext = name[dot:]
+		name = name[:dot]
+	}
+	runes := []rune(name)
+	if len(runes) <= prefixLen {
+		return string(runes) + "-" + ext
+	}
+	return string(runes[:prefixLen]) + "-" + ext
+}
+
 func ShortenPath(path string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
