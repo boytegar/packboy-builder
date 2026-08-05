@@ -173,6 +173,14 @@ func (m *model) renderFooter(separator string) (string, int) {
 	b.WriteString("\n")
 	b.WriteString(separator)
 	b.WriteString("\n")
+	// Pending-image badges sit on the reserved image/warning line, above the
+	// textarea. Rendered before inputRow so the cursor math stays correct —
+	// the badge line is part of the chrome below the separator, not part of
+	// the input row.
+	if badgeLine := m.renderImageBadgeLine(); badgeLine != "" {
+		b.WriteString(badgeLine)
+		b.WriteString("\n")
+	}
 	inputRow := strings.Count(b.String(), "\n")
 	b.WriteString(m.renderInputView())
 	if suggestions := m.userInput.Suggestions.Render(m.env.Width); suggestions != "" {
@@ -197,6 +205,23 @@ func (m model) renderInputView() string {
 		return prompt + ghostTextStyle.Render(m.userInput.PromptSuggestion.Text)
 	}
 	return prompt + hangComposerRows(m.userInput.RenderTextarea())
+}
+
+// renderImageBadgeLine renders one truncated-filename badge per pending image
+// on the reserved image/warning line, left-aligned with the textarea gutter.
+// Returns "" when no images are pending so no blank line is inserted. Each
+// badge mirrors the inline token's label (e.g. "[iniga-.png #2]") so the
+// above-text badge and the in-text token read identically.
+func (m model) renderImageBadgeLine() string {
+	if len(m.userInput.Images.Pending) == 0 {
+		return ""
+	}
+	var parts []string
+	for _, p := range m.userInput.Images.Pending {
+		label := input.ImageBadgeLabel(p.ID, p.Data.FileName)
+		parts = append(parts, conv.PendingImageStyle.Render(label))
+	}
+	return strings.Join(parts, " ")
 }
 
 // hangComposerRows indents every composer row after the first by the prompt's

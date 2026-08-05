@@ -718,6 +718,7 @@ func (m *model) ReconfigureAgentTool() {
 	executor.SetDisabledTools(m.services.Setting.DisabledTools())
 
 	adapter := subagent.NewExecutorAdapter(executor)
+	m.agentExecutor = adapter
 	type executorSetter interface{ SetExecutor(tool.AgentExecutor) }
 	for _, name := range []string{tool.ToolAgent, tool.ToolSendMessage} {
 		if t, ok := m.services.Tool.Get(name); ok {

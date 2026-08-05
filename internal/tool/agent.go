@@ -54,6 +54,12 @@ type AgentExecutor interface {
 	GetAgentConfig(name string) (AgentConfigInfo, bool)
 	ResolveAgentSelection(name string) (AgentConfigInfo, any, bool)
 	GetParentModelID() string
+	// SwapRunModelByName hot-swaps the model of every live subagent run whose
+	// config name matches agentName (or every inherited-default run when
+	// agentName is a global-default slot). Returns the number of runs swapped.
+	// The swap takes effect at the next inference step; conversation is
+	// preserved. modelRef is the same form the /models Subagents tab persists.
+	SwapRunModelByName(ctx context.Context, agentName, modelRef string) int
 }
 
 // ActivityFunc is called when the agent reports activity.

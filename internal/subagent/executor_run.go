@@ -19,6 +19,10 @@ type preparedRun struct {
 	cwd       string
 	startedAt time.Time
 	hookID    string
+	// client is the live LLM client backing the run. Stored so a mid-run model
+	// swap (SwapRunModel) can call SetModel/SetProvider without rebuilding the
+	// agent or losing the conversation. Set by buildAgent; nil before/after.
+	client *llm.Client
 	// activity is the tool-call trail included in the parent-visible result.
 	// Status lines (model, mode, token usage, spinner text) go only to
 	// OnActivity for the UI — they would be noise in the parent's context.
@@ -95,7 +99,7 @@ func (e *Executor) executePreparedRun(ctx context.Context, run *preparedRun) (*c
 			run.recordActivity(formatToolActivity(name, params))
 		}
 	}
-	ag, cleanupAgent, err := e.buildAgent(ctx, run, onToolExec, func(ev core.Event) {
+	ag, llmClient, cleanupAgent, err := e.buildAgent(ctx, run, onToolExec, func(ev core.Event) {
 		if resp, ok := ev.Response(); ok && ev.Type == core.PostInfer {
 			run.recordUsage(resp)
 		}
@@ -103,7 +107,18 @@ func (e *Executor) executePreparedRun(ctx context.Context, run *preparedRun) (*c
 	if err != nil {
 		return nil, err
 	}
+	run.client = llmClient
 	defer cleanupAgent()
+
+	// Register the run in the live-run registry so SwapRunModel can hot-swap
+	// its model mid-flight. The address matches the broker address below
+	// (TaskID for background, hookID for foreground).
+	agentAddr := run.req.TaskID
+	if agentAddr == "" {
+		agentAddr = run.hookID
+	}
+	e.registerRun(agentAddr, run)
+	defer e.unregisterRun(agentAddr)
 
 	if err := e.loadConversation(ag, ctx, run.cfg, run.req); err != nil {
 		return nil, err
@@ -118,10 +133,6 @@ func (e *Executor) executePreparedRun(ctx context.Context, run *preparedRun) (*c
 	// message it mid-flight); a foreground run has no task id, so it borrows
 	// its hook id purely as a sender identity — nothing routes back to a
 	// foreground worker, which blocks its spawning turn.
-	agentAddr := run.req.TaskID
-	if agentAddr == "" {
-		agentAddr = run.hookID
-	}
 	ctx = tool.WithAgentID(ctx, agentAddr)
 
 	// A background subagent registers its task id with the broker for the

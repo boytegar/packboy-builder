@@ -30,6 +30,7 @@ func mergeSettings(base, overlay *Data) *Data {
 	result.AutoPilot = mergeAutoPilot(base.AutoPilot, overlay.AutoPilot)
 	result.SubagentDefaultModel = coalesce(overlay.SubagentDefaultModel, base.SubagentDefaultModel)
 	result.SubagentModels = mergeMaps(base.SubagentModels, overlay.SubagentModels)
+	result.VisionModel = coalesce(overlay.VisionModel, base.VisionModel)
 	result.LastOperationMode = coalesce(overlay.LastOperationMode, base.LastOperationMode)
 	result.SkillDirs = mergeStringSlices(base.SkillDirs, overlay.SkillDirs)
 

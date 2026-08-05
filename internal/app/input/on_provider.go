@@ -8,6 +8,7 @@ package input
 
 import (
 	"context"
+	"fmt"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -28,6 +29,7 @@ type providerTab int
 const (
 	providerTabModels    providerTab = iota // model selection tab
 	providerTabProviders                    // provider management tab
+	providerTabVision                       // designated vision-model override
 	providerTabSubagents                    // per-subagent model override
 )
 
@@ -42,6 +44,7 @@ const (
 	providerItemSubagent                                     // selectable subagent row (Subagents tab phase 1)
 	providerItemSubagentDefault                              // selectable default-model row (Subagents tab phase 1)
 	providerItemSubagentDefaultWrite                         // selectable default-model-for-write row (Subagents tab phase 1)
+	providerItemVisionDefault                                // selectable vision-model row (Vision tab phase 0)
 )
 
 // providerListItem is a single row in the flattened visible-items list.
@@ -297,7 +300,10 @@ func UpdateProvider(deps OverlayDeps, state *ProviderState, msg tea.Msg) (tea.Cm
 	case providerModelSelectedMsg:
 		return handleProviderModelSelected(deps, state, msg), true
 	case subagentModelSavedMsg:
-		deps.Conv.Append(core.ChatMessage{Role: core.RoleNotice, Content: subagentSavedNotice(msg)})
+		handleSubagentModelSaved(deps, msg)
+		return tea.Batch(deps.CommitMessages()...), true
+	case visionModelSavedMsg:
+		deps.Conv.Append(core.ChatMessage{Role: core.RoleNotice, Content: visionSavedNotice(msg)})
 		return tea.Batch(deps.CommitMessages()...), true
 	case providerModelsLoadedMsg:
 		state.Selector.HandleModelsLoaded(msg)
@@ -340,4 +346,25 @@ func providerRefreshConnection(deps OverlayDeps, state *ProviderState, ctx conte
 		return
 	}
 	deps.SwitchProvider(p)
+}
+
+// handleSubagentModelSaved reloads the live settings handle so the
+// ReconfigureAgentTool override closure reads the fresh snapshot for new
+// spawns (updateSettingsFile only clears the package-level cache, not the
+// live *Settings.data), then hot-swaps the model of any running subagent
+// runs targeted by the save — no close/reopen needed. The swap takes effect
+// at the next inference step; conversation is preserved.
+func handleSubagentModelSaved(deps OverlayDeps, msg subagentModelSavedMsg) {
+	if deps.ReloadSettings != nil {
+		_ = deps.ReloadSettings()
+	}
+	notice := subagentSavedNotice(msg)
+	swapped := 0
+	if deps.SwapSubagentModels != nil {
+		swapped = deps.SwapSubagentModels(context.Background(), msg.AgentName, msg.Model)
+	}
+	if swapped > 0 {
+		notice += fmt.Sprintf(" · %d running subagent(s) hot-swapped", swapped)
+	}
+	deps.Conv.Append(core.ChatMessage{Role: core.RoleNotice, Content: notice})
 }

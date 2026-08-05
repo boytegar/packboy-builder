@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -16,6 +17,18 @@ import (
 	"github.com/boytegar/packboy-builder/internal/llm"
 	"github.com/boytegar/packboy-builder/internal/log"
 )
+
+// visionAnalysisMsg carries the vision model's image analysis back to the UI
+// goroutine. Err != nil means the pre-pass failed and the turn was not
+// submitted (images were not sent to the main model).
+type visionAnalysisMsg struct {
+	Analysis string
+	Err      error
+}
+
+// visionPrePassTimeout caps the vision pre-pass LLM call. A vision model that
+// hangs should not stall the turn indefinitely — the user can retry.
+const visionPrePassTimeout = 60 * time.Second
 
 // handleSubmit is the Enter handler. Reads the textarea; if a turn is
 // already streaming, queues for later; otherwise runs the submission
@@ -107,6 +120,19 @@ func (m *model) dispatchSubmission(raw string) tea.Cmd {
 	if !ok {
 		return tea.Batch(m.CommitMessages()...)
 	}
+	// Vision pre-pass: when images are present and a VisionModel is configured,
+	// route the images to the vision model first. Its text analysis is merged
+	// into the prompt as a system-reminder and the images are stripped, so a
+	// text-only main model can act on the image content. The turn is deferred:
+	// we stash the message, emit an async llm.AnalyzeImages cmd, and resume
+	// (append + submit) when the analysis arrives (handleVisionAnalysis).
+	if len(msg.Images) > 0 && m.visionModelConfigured() {
+		m.enqueueMatchingSkills(raw)
+		msg.AutopilotNote = autopilotNote
+		m.pendingVisionMsg = &msg
+		m.userInput.Reset()
+		return m.visionPrePassCmd(msg.Images)
+	}
 	// Hold the turn (keeping the input) if it carries images the active model
 	// can't accept, rather than letting the provider reject the request.
 	if m.imagesBlockedForModel(msg.Images) {
@@ -162,6 +188,58 @@ func (m *model) imagesBlockedForModel(images []core.Image) bool {
 	}
 	m.conv.AddNotice("The current model doesn't support images — remove the image or switch to a vision-capable model.")
 	return true
+}
+
+// visionModelConfigured reports whether a vision pre-pass model is set in the
+// live settings snapshot. Returns false when the field is empty/inherit (no
+// pre-pass) so the normal image gate and text-only strip still apply.
+func (m *model) visionModelConfigured() bool {
+	if m.services.Setting == nil {
+		return false
+	}
+	ref := strings.TrimSpace(m.services.Setting.Snapshot().VisionModel)
+	return ref != "" && ref != "inherit"
+}
+
+// visionPrePassCmd emits an async tea.Cmd that calls llm.AnalyzeImages with the
+// designated vision model. Modeled on autopilotAsync: the LLM call runs off the
+// UI goroutine with a timeout, and the result returns as visionAnalysisMsg.
+func (m *model) visionPrePassCmd(images []core.Image) tea.Cmd {
+	ref := strings.TrimSpace(m.services.Setting.Snapshot().VisionModel)
+	store := m.services.LLM.Store()
+	imagesCopy := make([]core.Image, len(images))
+	copy(imagesCopy, images)
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), visionPrePassTimeout)
+		defer cancel()
+		analysis, err := llm.AnalyzeImages(ctx, store, ref, imagesCopy)
+		return visionAnalysisMsg{Analysis: analysis, Err: err}
+	}
+}
+
+// handleVisionAnalysis resumes a deferred turn after the vision pre-pass
+// completes. On success the analysis is enqueued as a reminder (lands on the
+// user turn via attachPendingReminders), images are stripped from the message,
+// and the message is appended + submitted. On failure a notice is shown and
+// the turn is not submitted (images never reach the main model). The stashed
+// pending message is cleared either way.
+func (m *model) handleVisionAnalysis(msg visionAnalysisMsg) tea.Cmd {
+	pending := m.pendingVisionMsg
+	m.pendingVisionMsg = nil
+	if pending == nil {
+		return nil
+	}
+	if msg.Err != nil {
+		m.conv.AddNotice("Vision analysis failed: " + msg.Err.Error())
+		return tea.Batch(m.CommitMessages()...)
+	}
+	if strings.TrimSpace(msg.Analysis) != "" {
+		m.services.Reminder.Enqueue("Image analysis (from the vision model):\n" + msg.Analysis)
+	}
+	// Strip images — the main model gets the text analysis instead of pixels.
+	pending.Images = nil
+	m.conv.Append(*pending)
+	return m.SubmitToAgent(pending.Content, nil)
 }
 
 // drainInputQueueWhileIdle pops one queued item (if any) and runs it

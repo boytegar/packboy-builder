@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/boytegar/packboy-builder/internal/app/kit"
 	"github.com/boytegar/packboy-builder/internal/app/kit/history"
 	"github.com/boytegar/packboy-builder/internal/app/kit/suggest"
 	"github.com/boytegar/packboy-builder/internal/core"
@@ -31,6 +32,30 @@ var imageRefPattern = regexp.MustCompile(`(?i)@([^\s]+\.(png|jpg|jpeg|gif|webp))
 // of an image path into the terminal. Only paths containing a separator (/ or \)
 // are matched to avoid treating bare filenames or coincidental text as images.
 var bareImagePathRe = regexp.MustCompile(`(?i)((?:/[^\s]+|[^\s]+[/\\][^\s]*)\.(png|jpg|jpeg|gif|webp))`)
+
+// loadImageRef resolves a relative or absolute path (from the file autocomplete)
+// against cwd and loads it as a core.Image if it is a supported image file.
+// Returns (img, false) when the path is not an image or the load fails — the
+// caller falls back to inserting the path as plain text. Mirrors ProcessImageRefs'
+// resolution but is called at accept-time (when the user picks a file suggestion)
+// rather than at submit-time.
+func loadImageRef(cwd, path string) (core.Image, bool) {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
+	default:
+		return core.Image{}, false
+	}
+	absPath := path
+	if !filepath.IsAbs(absPath) && cwd != "" {
+		absPath = filepath.Join(cwd, path)
+	}
+	img, err := image.Load(absPath)
+	if err != nil {
+		return core.Image{}, false
+	}
+	return img, true
+}
 
 // ImageTokenMatch describes an inline image token found in the textarea value.
 type ImageTokenMatch struct {
@@ -61,9 +86,24 @@ func (m *Model) SetTerminalHeight(height int) {
 	m.Textarea.MaxHeight = m.maxTextareaHeight()
 }
 
-// imageLabel returns the display label for a pending image token.
-func imageLabel(id int) string {
-	return fmt.Sprintf("[Image #%d]", id)
+// imageLabel returns the display label for a pending image token. The token
+// shape is "[<truncated-filename> #<id>]" where the filename is the pending
+// image's FileName shortened to 5 runes + "-" + extension (e.g.
+// "inigambarsaya.png" → "iniga-.png"). The trailing " #<id>" keeps tokens
+// unique when two images share a filename (PendingImageMatchesIn finds the
+// first occurrence by literal substring) and keeps the numeric ID that
+// InlineImageTokenRe captures in group 1. Clipboard pastes with a synthetic
+// "clipboard_HHMMSS.png" name → "clipb-.png #<id>".
+func imageLabel(id int, fileName string) string {
+	return ImageBadgeLabel(id, fileName)
+}
+
+// ImageBadgeLabel builds the badge/inline token label for a pending image:
+// "[<truncated-filename> #<id>]". Exported so the view layer can render the
+// above-textarea badge line with the same label the inline token uses, without
+// reaching into the unexported helper.
+func ImageBadgeLabel(id int, fileName string) string {
+	return fmt.Sprintf("[%s #%d]", kit.TruncateFilenameKeepExt(fileName, 5), id)
 }
 
 // AddPendingImage appends a new inline image token and returns its label.
@@ -73,7 +113,7 @@ func (m *Model) AddPendingImage(img core.Image) string {
 		ID:   m.Images.NextID,
 		Data: img,
 	})
-	return imageLabel(m.Images.NextID)
+	return imageLabel(m.Images.NextID, img.FileName)
 }
 
 // ClearImages resets all inline image state.
@@ -136,7 +176,7 @@ func (m *Model) PendingImageMatchesIn(value string) []ImageTokenMatch {
 	matches := make([]ImageTokenMatch, 0, len(m.Images.Pending))
 
 	for idx, pending := range m.Images.Pending {
-		label := imageLabel(pending.ID)
+		label := imageLabel(pending.ID, pending.Data.FileName)
 		start := indexRunes(valueRunes, label, 0)
 		if start < 0 {
 			continue
@@ -504,9 +544,21 @@ func (m *Model) HandleSuggestionKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			if m.Suggestions.GetSuggestionType() == suggest.TypeFile {
 				currentValue := m.Textarea.Value()
 				if atIdx := strings.LastIndex(currentValue, "@"); atIdx >= 0 {
-					newValue := currentValue[:atIdx] + "@" + selected
-					m.Textarea.SetValue(newValue)
-					m.Textarea.CursorEnd()
+					// If the accepted file is an image, convert the @ref to an
+					// inline image token (badge + pending image) instead of
+					// inserting the path as plain text — matching Ctrl+V paste.
+					// The cwd comes from the suggestion engine's working dir.
+					if img, ok := loadImageRef(m.Suggestions.Cwd(), selected); ok {
+						label := m.AddPendingImage(img)
+						newValue := currentValue[:atIdx] + label
+						m.Textarea.SetValue(newValue)
+						m.Textarea.CursorEnd()
+						m.Images.Selection = ImageSelection{}
+					} else {
+						newValue := currentValue[:atIdx] + "@" + selected
+						m.Textarea.SetValue(newValue)
+						m.Textarea.CursorEnd()
+					}
 				}
 			} else {
 				m.Textarea.SetValue(selected + " ")

@@ -429,6 +429,11 @@ func (s *State) SetCwd(cwd string) {
 	}
 }
 
+// Cwd returns the working directory the suggestion engine scans files from.
+// Callers (e.g. the textarea's @path-accept hook) use it to resolve a relative
+// suggestion path to an absolute path for image loading.
+func (s *State) Cwd() string { return s.cwd }
+
 func (s *State) MoveUp() {
 	if s.selectedIdx > 0 {
 		s.selectedIdx--

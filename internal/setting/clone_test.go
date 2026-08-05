@@ -17,6 +17,7 @@ func TestClonePreservesAllScalarFields(t *testing.T) {
 		Persona:              "ml-researcher",
 		SkillDirs:            []string{"/mnt/shared/skills", "~/team-skills"},
 		SubagentDefaultModel: "haiku",
+		VisionModel:          "openai/gpt-4o",
 		SelfLearn: SelfLearnSettings{
 			Memory:   SelfLearnMemory{Enabled: true, MaxKB: 15},
 			Skills:   SelfLearnSkills{DenyCreate: true},
@@ -46,6 +47,9 @@ func TestClonePreservesAllScalarFields(t *testing.T) {
 	}
 	if dst.SubagentDefaultModel != src.SubagentDefaultModel {
 		t.Errorf("SubagentDefaultModel: got %q, want %q", dst.SubagentDefaultModel, src.SubagentDefaultModel)
+	}
+	if dst.VisionModel != src.VisionModel {
+		t.Errorf("VisionModel: got %q, want %q", dst.VisionModel, src.VisionModel)
 	}
 	// SkillDirs must round-trip and be an independent copy so mutating dst
 	// cannot bleed back into src.
@@ -131,6 +135,34 @@ func TestCloneSubagentDefaultModel(t *testing.T) {
 	clone.SubagentDefaultModel = "opus"
 	if src.SubagentDefaultModel != "haiku" {
 		t.Errorf("clone leaked: src default = %q, want haiku", src.SubagentDefaultModel)
+	}
+}
+
+// TestMergeSettingsCoalescesVisionModel guards the coalesce merge for the
+// vision pre-pass model: overlay's non-empty value wins; base survives an
+// empty overlay.
+func TestMergeSettingsCoalescesVisionModel(t *testing.T) {
+	base := &Data{VisionModel: "openai/gpt-4o"}
+	overlay := &Data{VisionModel: "anthropic/claude-sonnet-4"}
+
+	got := mergeSettings(base, overlay)
+	if got.VisionModel != "anthropic/claude-sonnet-4" {
+		t.Errorf("overlay vision: got %q, want anthropic/claude-sonnet-4", got.VisionModel)
+	}
+
+	got = mergeSettings(&Data{VisionModel: "openai/gpt-4o"}, &Data{})
+	if got.VisionModel != "openai/gpt-4o" {
+		t.Errorf("base-only vision: got %q, want openai/gpt-4o", got.VisionModel)
+	}
+}
+
+// TestCloneVisionModel guards the scalar clone of the vision model.
+func TestCloneVisionModel(t *testing.T) {
+	src := &Data{VisionModel: "openai/gpt-4o"}
+	clone := src.Clone()
+	clone.VisionModel = "anthropic/claude-sonnet-4"
+	if src.VisionModel != "openai/gpt-4o" {
+		t.Errorf("clone leaked: src vision = %q, want openai/gpt-4o", src.VisionModel)
 	}
 }
 

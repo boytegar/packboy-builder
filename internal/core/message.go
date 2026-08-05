@@ -457,11 +457,15 @@ type ContentPart struct {
 	Image *Image
 }
 
-// InlineImageTokenRe matches the "[Image #N]" placeholder tokens that stand in
-// for image attachments in a message's DisplayContent. It is the single
-// definition of that wire token format, shared by the display and persistence
-// layers so they parse it identically.
-var InlineImageTokenRe = regexp.MustCompile(`\[Image #(\d+)\]`)
+// InlineImageTokenRe matches the "[…#N]" placeholder tokens that stand in for
+// image attachments in a message's DisplayContent. The token shape is
+// "[<label> #N]" where <label> is a short filename-derived display name (e.g.
+// "iniga-.png") or the legacy literal "Image"; the numeric ID in capture group
+// 1 is load-bearing (Atoi in BuildImageIDMap, InterleavedContentParts, and the
+// session reload path). It is the single definition of that wire token format,
+// shared by the display and persistence layers so they parse it identically.
+// Backward compatible: the legacy "[Image #N]" shape still matches.
+var InlineImageTokenRe = regexp.MustCompile(`\[[^\[\]]*?#(\d+)\]`)
 
 // InterleavedContentParts parses [Image #N] tokens from display content and returns
 // interleaved text and image parts.
