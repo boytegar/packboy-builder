@@ -106,3 +106,121 @@ func TestStateFailAndFinishEmitTerminalChunks(t *testing.T) {
 		t.Fatalf("expected final response content to be preserved, got %#v", doneChunk.Response)
 	}
 }
+
+func TestFinishOrTruncatedFailsWhenNoTerminalSignal(t *testing.T) {
+	ch := make(chan llm.StreamChunk, 4)
+	state := NewState("test")
+	// No content, no stop reason, no tool call: a terminal signal is required.
+	state.FinishOrTruncated(context.Background(), ch, false)
+	got := <-ch
+	if got.Type != llm.ChunkTypeError || got.Error == nil {
+		t.Fatalf("expected a retryable error chunk, got %#v", got)
+	}
+	var rt core.RetryableError
+	if !errors.As(got.Error, &rt) {
+		t.Fatalf("truncation error %v is not retryable", got.Error)
+	}
+}
+
+func TestFinishOrTruncatedFinishesWhenTerminalSeen(t *testing.T) {
+	ch := make(chan llm.StreamChunk, 4)
+	state := NewState("test")
+	state.EmitText(context.Background(), ch, "hello")
+	<-ch
+	// Not passing sawTerminal, but a stop reason is set → treat as finished.
+	state.Response.StopReason = core.StopEndTurn
+	state.FinishOrTruncated(context.Background(), ch, false)
+	got := <-ch
+	if got.Type != llm.ChunkTypeDone || got.Response == nil {
+		t.Fatalf("expected a done chunk, got %#v", got)
+	}
+}
+
+func TestEstimatePromptCharsFillsZeroUsage(t *testing.T) {
+	ch := make(chan llm.StreamChunk, 4)
+	state := NewState("test")
+	state.PromptChars = 1000                                               // 250 tokens by the char/4 estimate
+	state.EmitText(context.Background(), ch, "abcdefgh ijklmnop qrstuvwx") // 26 chars → 7 out
+	<-ch
+	state.Finish(context.Background(), ch)
+	done := <-ch
+	if done.Response == nil {
+		t.Fatal("missing done chunk")
+	}
+	if done.Response.Usage.InputTokens != 250 {
+		t.Fatalf("InputTokens = %d, want 250", done.Response.Usage.InputTokens)
+	}
+	if done.Response.Usage.OutputTokens != 7 {
+		t.Fatalf("OutputTokens = %d, want 7", done.Response.Usage.OutputTokens)
+	}
+	if done.Response.Usage.TotalTokens != 257 {
+		t.Fatalf("TotalTokens = %d, want 257", done.Response.Usage.TotalTokens)
+	}
+}
+
+func TestEstimateUsagePreservesProvidedUsage(t *testing.T) {
+	ch := make(chan llm.StreamChunk, 4)
+	state := NewState("test")
+	state.PromptChars = 1000
+	state.UpdateUsage(11, 7)
+	state.Finish(context.Background(), ch)
+	done := <-ch
+	if got := done.Response.Usage.InputTokens; got != 11 {
+		t.Fatalf("InputTokens = %d, want provider-provided 11", got)
+	}
+	if got := done.Response.Usage.OutputTokens; got != 7 {
+		t.Fatalf("OutputTokens = %d, want provider-provided 7", got)
+	}
+}
+
+// Providers that only emit OutputTokens (Anthropic message_delta, salvage paths)
+// must still get an InputTokens estimate from PromptChars — all-or-nothing bail
+// left status-bar/compaction at in:0.
+func TestEstimateUsageFillsMissingInputOnly(t *testing.T) {
+	ch := make(chan llm.StreamChunk, 4)
+	state := NewState("test")
+	state.PromptChars = 1000 // → 250
+	state.UpdateUsage(0, 42) // provider output only
+	state.Finish(context.Background(), ch)
+	done := <-ch
+	if got := done.Response.Usage.InputTokens; got != 250 {
+		t.Fatalf("InputTokens = %d, want estimated 250", got)
+	}
+	if got := done.Response.Usage.OutputTokens; got != 42 {
+		t.Fatalf("OutputTokens = %d, want provider 42", got)
+	}
+	if got := done.Response.Usage.TotalTokens; got != 292 {
+		t.Fatalf("TotalTokens = %d, want 292", got)
+	}
+}
+
+func TestEstimateUsagePreservesCacheWhenFillingInput(t *testing.T) {
+	ch := make(chan llm.StreamChunk, 4)
+	state := NewState("test")
+	state.PromptChars = 400 // → 100
+	state.UpdateUsage(0, 5)
+	state.UpdateCacheUsage(10, 90)
+	state.Finish(context.Background(), ch)
+	done := <-ch
+	u := done.Response.Usage
+	if u.InputTokens != 100 {
+		t.Fatalf("InputTokens = %d, want 100", u.InputTokens)
+	}
+	if u.CacheCreationTokens != 10 || u.CacheReadTokens != 90 {
+		t.Fatalf("cache tokens clobbered: creation=%d read=%d", u.CacheCreationTokens, u.CacheReadTokens)
+	}
+}
+
+func TestEstimatePromptCharsCountsContent(t *testing.T) {
+	msgs := []core.Message{
+		{Role: core.RoleUser, Content: "hello world"},
+		{Role: core.RoleAssistant, Content: "abc", ToolCalls: []core.ToolCall{{Name: "Read", Input: "{\"x\":1}"}}},
+		{Role: core.RoleUser, ToolResult: &core.ToolResult{Content: "big result"}},
+	}
+	got := EstimatePromptChars("sys", msgs)
+	// 3 (sys) + 11 (hello world) + 3 (abc) + 4+7 (Read + {"x":1}) + 10 (big result)
+	want := 3 + 11 + 3 + 4 + 7 + 10
+	if got != want {
+		t.Fatalf("EstimatePromptChars = %d, want %d", got, want)
+	}
+}

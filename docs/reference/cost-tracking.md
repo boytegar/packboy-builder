@@ -10,6 +10,34 @@ Token usage is tracked per turn and accumulated across the session. Cost is calc
 - **Pricing:** model-aware; updates when the model changes
 - **Token limits:** `/tokenlimit <input> <output>` can persist a manual override
 
+
+
+## Crush-aligned token fields
+
+Runtime `core.Usage` matches charm.land/fantasy (crush):
+
+| Field | JSON | Role |
+|---|---|---|
+| `InputTokens` | `input_tokens` | Fresh (uncached) input |
+| `OutputTokens` | `output_tokens` | Completion |
+| `TotalTokens` | `total_tokens` | Optional provider total |
+| `ReasoningTokens` | `reasoning_tokens` | Optional reasoning |
+| `CacheCreationTokens` | `cache_creation_tokens` | Cache write (cost only) |
+| `CacheReadTokens` | `cache_read_tokens` | Cache read |
+
+**Prompt occupancy** (`TotalInputTokens` / status-bar ctx): `InputTokens + CacheReadTokens` (excludes cache creation).
+
+**Missing-usage estimate** (`stream.State.estimateUsageIfMissing`): fills
+**per-field** zeros (Input and/or Output) via char/4 from `PromptChars` +
+buffered content. Providers that only emit OutputTokens (Anthropic
+`message_delta`, partial-stream salvage) still get an Input estimate so the
+status bar and compaction are not stuck at `in:0`. Cache/reasoning from the
+provider are never overwritten.
+
+**Transcript persistence** (`inference.responded`, schema v2): only
+`prompt_tokens` (= Input + CacheRead) and `completion_tokens` (= Output).
+Cache write tokens are not persisted.
+
 ## UI Interactions
 
 - **Status bar**: shows `in: N / out: N / $X.XX` after each turn.

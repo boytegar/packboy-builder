@@ -431,7 +431,7 @@ const AutoCompactThresholdPercent = 95
 
 // NeedsCompaction reports whether the prompt has reached
 // AutoCompactThresholdPercent of the model's input limit. promptTokens must be
-// the FULL prompt size — including any cache-read/cache-creation portion, i.e.
+// crush-aligned prompt occupancy (Input + CacheRead), i.e.
 // InferResponse.TotalInputTokens — not just the uncached delta.
 func NeedsCompaction(promptTokens, inputLimit int) bool {
 	if inputLimit == 0 || promptTokens == 0 {

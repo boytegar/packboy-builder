@@ -356,11 +356,11 @@ func (r *Recorder) onPostInfer(ev core.Event) {
 			Turn:       turn,
 			StopReason: string(resp.StopReason),
 			LatencyMs:  latencyMs,
+			// Crush-aligned: Prompt = Input + CacheRead; Completion = Output.
+			// Cache creation is cost-only (not persisted on transcript).
 			Usage: &transcript.InferenceUsage{
-				InputTokens:              resp.InputTokens,
-				OutputTokens:             resp.OutputTokens,
-				CacheCreationInputTokens: resp.CacheCreationInputTokens,
-				CacheReadInputTokens:     resp.CacheReadInputTokens,
+				PromptTokens:     resp.InputTokens + resp.CacheReadTokens,
+				CompletionTokens: resp.OutputTokens,
 			},
 		},
 	})

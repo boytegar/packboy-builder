@@ -58,12 +58,20 @@ func StreamChatCompletions(ctx context.Context, cfg ChatStreamConfig) <-chan llm
 		log.LogRequestCtx(ctx, cfg.ProviderName, opts.Model, opts)
 
 		stream := cfg.Client.Chat.Completions.NewStreaming(ctx, params)
+		defer stream.Close() // release the HTTP body on every exit
+
 		state := streamutil.NewState(cfg.ProviderName)
+		state.PromptChars = streamutil.EstimatePromptChars(opts.SystemPrompt, opts.Messages)
 		toolCalls := make(map[int]*core.ToolCall)
+		// sawFinish tracks whether any choice delivered a finish_reason. A socket
+		// close before one is a truncated stream and must be retried (unless the
+		// JSON-syntax salvage path below preserves partial content).
+		sawFinish := false
 
 		for stream.Next() {
 			chunk := stream.Current()
 			state.Count()
+			state.Progress(ctx, ch)
 
 			for _, choice := range chunk.Choices {
 				if cfg.ExtractReasoning {
@@ -87,6 +95,7 @@ func StreamChatCompletions(ctx context.Context, cfg ChatStreamConfig) <-chan llm
 
 				if choice.FinishReason != "" {
 					state.Response.StopReason = MapFinishReason(choice.FinishReason)
+					sawFinish = true
 				}
 			}
 
@@ -119,7 +128,7 @@ func StreamChatCompletions(ctx context.Context, cfg ChatStreamConfig) <-chan llm
 
 		state.AddToolCallsSorted(toolCalls)
 		state.EnsureToolUseStopReason()
-		state.Finish(ctx, ch)
+		state.FinishOrTruncated(ctx, ch, sawFinish)
 	}()
 
 	return ch

@@ -262,6 +262,11 @@ const (
 	ChunkTypeThinking ChunkType = "thinking"
 	ChunkTypeDone     ChunkType = "done"
 	ChunkTypeError    ChunkType = "error"
+	// ChunkTypeProgress is a keepalive: the upstream stream is alive (tool-arg
+	// deltas, pings, empty frames) but has nothing user-visible to emit. The
+	// Infer bridge turns it into a zero core.Chunk so streamInfer rearms its
+	// idle timer without touching the UI.
+	ChunkTypeProgress ChunkType = "progress"
 )
 
 // StreamChunk represents a chunk in a streaming response from a provider.

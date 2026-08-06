@@ -113,8 +113,8 @@ func EstimateCost(modelID string, usage llm.Usage) (llm.Money, bool) {
 		const perMillion = 1_000_000.0
 		cost := (float64(usage.InputTokens) / perMillion) * entry.pricing.inputPerMTokens
 		cost += (float64(usage.OutputTokens) / perMillion) * entry.pricing.outputPerMTokens
-		cost += (float64(usage.CacheReadInputTokens) / perMillion) * entry.pricing.cacheReadPerMTokens
-		cost += (float64(usage.CacheCreationInputTokens) / perMillion) * entry.pricing.cacheWritePerMTokens
+		cost += (float64(usage.CacheReadTokens) / perMillion) * entry.pricing.cacheReadPerMTokens
+		cost += (float64(usage.CacheCreationTokens) / perMillion) * entry.pricing.cacheWritePerMTokens
 		return llm.Money{Amount: cost, Currency: llm.CurrencyCNY}, true
 	}
 	return llm.Money{}, false

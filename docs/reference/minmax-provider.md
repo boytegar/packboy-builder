@@ -133,8 +133,8 @@ If runtime verification shows MiniMax's Anthropic-compatible endpoint needs a sm
 
 - `input_tokens`
 - `output_tokens`
-- `cache_creation_input_tokens`
-- `cache_read_input_tokens`
+- `cache_creation_tokens`
+- `cache_read_tokens`
 
 Relevant code:
 
@@ -203,8 +203,8 @@ This means:
 
 MiniMax documents prompt caching on the Anthropic-compatible path and returns:
 
-- `cache_creation_input_tokens`
-- `cache_read_input_tokens`
+- `cache_creation_tokens`
+- `cache_read_tokens`
 
 `pcb` already marks the system prompt as ephemeral in the Anthropic provider path, so MiniMax can benefit from this with little or no additional protocol work.
 

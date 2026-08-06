@@ -87,7 +87,7 @@ AUTO  (core agent, inside the ThinkAct loop)
   ┌────────────────────────────────────────────────────────────┐
   │ each step (measurement carried across turns):                │
   │   prompt size the provider reported last step, which is      │
-  │   TotalInputTokens (fresh + cache read + cache creation),    │
+  │   TotalInputTokens (fresh + cache read; crush-aligned),    │
   │   not InputTokens — under prompt caching the latter is only  │
   │   the uncached delta and reads near-empty on a full context. │
   │   Before the first inference there is no such count, so the  │

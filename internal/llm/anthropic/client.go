@@ -3,7 +3,9 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"sync"
@@ -197,18 +199,27 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 
 		// Create streaming request
 		stream := c.client.Messages.NewStreaming(ctx, params, reqOpts...)
+		defer stream.Close() // release the HTTP body on every exit
 
 		state := streamutil.NewState(c.name)
+		state.PromptChars = streamutil.EstimatePromptChars(opts.SystemPrompt, opts.Messages)
 
 		// Track tool calls
 		var currentToolID string
 		var currentToolName string
 		var currentToolInput strings.Builder
 
+		// sawMessageStop is set by the Anthropic message_stop event. Requiring it
+		// before finishing mirrors fantasy: a socket close after the last
+		// content_block_delta but before message_stop is a truncated stream, not a
+		// clean end_turn, and must be retried rather than accepted.
+		sawMessageStop := false
+
 		// Read stream events
 		for stream.Next() {
 			event := stream.Current()
 			state.Count()
+			state.Progress(ctx, ch)
 
 			switch event.Type {
 			case "content_block_start":
@@ -249,13 +260,22 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 
 			case "message_delta":
 				msgDelta := event.AsMessageDelta()
-				state.Response.StopReason = core.StopReason(msgDelta.Delta.StopReason)
+				// Guard empty stop_reason: Anthropic (and compat proxies) may emit
+				// usage-only message_delta events with stop_reason="". Overwriting
+				// a previously set reason with "" makes FinishOrTruncated treat a
+				// complete stream as truncated → retry → DropStreamingAssistant.
+				if msgDelta.Delta.StopReason != "" {
+					state.Response.StopReason = core.StopReason(msgDelta.Delta.StopReason)
+				}
 				// Anthropic populates only OutputTokens here; some Anthropic-compatible
 				// providers (e.g. SenseNova) emit InputTokens in message_delta rather
 				// than message_start. UpdateUsage is a no-op when the value is 0, so
 				// passing both is safe for either shape.
 				state.UpdateUsage(int(msgDelta.Usage.InputTokens), int(msgDelta.Usage.OutputTokens))
 				state.UpdateCacheUsage(int(msgDelta.Usage.CacheCreationInputTokens), int(msgDelta.Usage.CacheReadInputTokens))
+
+			case "message_stop":
+				sawMessageStop = true
 
 			case "message_start":
 				msgStart := event.AsMessageStart()
@@ -267,16 +287,57 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 			}
 		}
 
+		// Flush any in-flight tool_use block that never received content_block_stop
+		// (common on mid-stream disconnect / max_tokens cut).
+		if currentToolID != "" && currentToolName != "" {
+			state.Response.ToolCalls = append(state.Response.ToolCalls, core.ToolCall{
+				ID:    currentToolID,
+				Name:  currentToolName,
+				Input: currentToolInput.String(),
+			})
+			currentToolID = ""
+			currentToolName = ""
+			currentToolInput.Reset()
+		}
+
 		if err := stream.Err(); err != nil {
+			// Mirror openaicompat: keep partial content on truncated/malformed SSE
+			// instead of discarding it and forcing a full retry (stream "putus").
+			if state.HasContent() && isRetriableStreamParseError(err) {
+				log.LogError(c.name, err)
+				state.EnsureToolUseStopReason()
+				state.Finish(ctx, ch)
+				return
+			}
 			state.Fail(ctx, ch, err)
 			return
 		}
 
 		state.EnsureToolUseStopReason()
-		state.Finish(ctx, ch)
+		// Require the terminal message_stop signal (plus a stop reason) so a
+		// silent EOF mid-SSE is retried instead of surfacing as a clean end_turn
+		// (mirrors fantasy's sawMessageStop gate).
+		state.FinishOrTruncated(ctx, ch, sawMessageStop && state.Response.StopReason != "")
 	}()
 
 	return ch
+}
+
+// isRetriableStreamParseError reports SSE/JSON parse failures that leave partial
+// content deliverable (truncated data: line, unexpected EOF mid-frame). Real
+// API/auth errors still Fail so the agent can surface them.
+func isRetriableStreamParseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "unexpected end of JSON input") ||
+		strings.Contains(msg, "unexpected EOF") ||
+		errors.Is(err, io.ErrUnexpectedEOF)
 }
 
 // defaultModels is the fallback static model list.

@@ -31,16 +31,17 @@ type InferRequest struct {
 	Tools    []ToolSchema // available tools
 }
 
-// Usage is the token accounting for one LLM call. Field names use the project's
-// domain vocabulary; the json tags preserve each provider's wire format (e.g.
-// Anthropic's cache_creation_input_tokens). It lives in core, the foundation
-// layer, so both core.InferResponse and the llm provider response share one
-// definition (llm.Usage aliases this).
+// Usage is the token accounting for one LLM call. Shape matches charm.land/fantasy
+// (crush): Input/Output plus cache + optional total/reasoning. JSON tags are the
+// fantasy wire names. It lives in core so both core.InferResponse and the llm
+// provider response share one definition (llm.Usage aliases this).
 type Usage struct {
-	InputTokens              int `json:"input_tokens"`
-	OutputTokens             int `json:"output_tokens"`
-	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
-	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
+	InputTokens         int `json:"input_tokens"`
+	OutputTokens        int `json:"output_tokens"`
+	TotalTokens         int `json:"total_tokens,omitempty"`
+	ReasoningTokens     int `json:"reasoning_tokens,omitempty"`
+	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
+	CacheReadTokens     int `json:"cache_read_tokens,omitempty"`
 }
 
 // InferResponse is the final aggregated response from one LLM call.
@@ -54,13 +55,12 @@ type InferResponse struct {
 	Usage
 }
 
-// TotalInputTokens is the full prompt size the model processed: fresh input
-// plus the cached portion (e.g. Anthropic reports the cache-marked system
-// prompt under CacheRead/CacheCreation, not InputTokens). This is the figure
-// that reflects context-window occupancy; InputTokens alone undercounts it
-// whenever prompt caching is active.
+// TotalInputTokens is context-window occupancy for the prompt, matching crush's
+// updateSessionTokenCounters: InputTokens + CacheReadTokens. CacheCreation is
+// billed separately and excluded from the prompt total (creation is a write cost,
+// not additional occupied context beyond the eventual cache-read figure).
 func (r InferResponse) TotalInputTokens() int {
-	return r.InputTokens + r.CacheCreationInputTokens + r.CacheReadInputTokens
+	return r.InputTokens + r.CacheReadTokens
 }
 
 // Logging accessors — satisfy the duck-typed responseLoggable interface in the
