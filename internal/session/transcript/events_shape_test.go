@@ -95,7 +95,7 @@ func TestEventsShape(t *testing.T) {
 		SessionID: sid, Time: at(9), Type: InferenceResponded,
 		Record: InferenceRecord{
 			Turn: 1, StopReason: "end_turn", LatencyMs: 123,
-			Usage: &InferenceUsage{InputTokens: 100, OutputTokens: 50},
+			Usage: &InferenceUsage{PromptTokens: 100, CompletionTokens: 50},
 		},
 	}))
 
@@ -164,8 +164,8 @@ func TestEventsShape(t *testing.T) {
 	if st["cwd"] != "/repo" {
 		t.Errorf("session.started cwd = %v, want /repo", st["cwd"])
 	}
-	if st["version"] != "1" {
-		t.Errorf("session.started version = %v, want 1", st["version"])
+	if st["version"] != "2" {
+		t.Errorf("session.started version = %v, want 2", st["version"])
 	}
 	sess, _ := st["session"].(map[string]any)
 	for k, want := range map[string]any{

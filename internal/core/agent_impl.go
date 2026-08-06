@@ -254,6 +254,11 @@ var errStopped = errors.New("stopped")
 // and the caller wants the model to continue in the next turn.
 const TruncatedResumePrompt = "Your response was truncated due to output token limits. Resume directly from where you left off. Do not repeat any content."
 
+// TruncatedToolCallResumePrompt is injected after a max_tokens stop that still
+// produced tool calls whose arguments look cut mid-JSON. Tools already ran
+// (ParseToolInput fails soft); this asks the model to reissue complete calls.
+const TruncatedToolCallResumePrompt = "Your previous tool call arguments were truncated due to output token limits. Reissue any incomplete tool calls with complete, valid JSON arguments. Do not repeat successful tool results."
+
 // waitForInput blocks until a real (turn-starting) message arrives, then drains
 // remaining. Control-only signals such as SigCompact are processed but do not
 // start a turn: if a wake-up delivered nothing but signals, we loop back to
@@ -415,13 +420,11 @@ func (a *agent) ThinkAct(ctx context.Context) (*Result, error) {
 		turnRetries = 0 // reset budget once a step completes
 
 		steps++
-		// Record the FULL prompt the model processed, not resp.InputTokens: with
-		// prompt caching on, a provider reports the cached prefix under
-		// CacheRead/CacheCreation and InputTokens holds only the uncached delta —
-		// a few hundred tokens against a 200k window. Testing that against the
-		// limit read ~1% while the context was nearly full, so auto-compaction
-		// never fired (issue #338). TotalInputTokens is also what the status bar
-		// displays, so the two now agree.
+		// Record crush-aligned prompt occupancy (Input + CacheRead), not the
+		// uncached delta alone: under prompt caching InputTokens is only the
+		// fresh slice. Testing that against the limit undercounted occupancy
+		// so auto-compaction never fired (issue #338). TotalInputTokens is
+		// also what the status bar displays, so the two agree.
 		a.lastTotalInputTokens = resp.TotalInputTokens()
 		tokensIn += resp.InputTokens
 		tokensOut += resp.OutputTokens
@@ -438,7 +441,11 @@ func (a *agent) ThinkAct(ctx context.Context) (*Result, error) {
 		// honestly beats resurrecting an earlier step's narration as the outcome.
 		lastContent = resp.Content
 
-		// Max tokens recovery — output truncated, ask LLM to continue
+		// Max tokens recovery — output truncated, ask LLM to continue.
+		// Text-only truncation resumes via TruncatedResumePrompt. Tool-call
+		// truncation is riskier: partial JSON args would execTools with garbage,
+		// so we still run tools that parse, then inject a resume nudge for the
+		// next step when any call looks truncated (empty/invalid JSON object).
 		if resp.StopReason == StopMaxTokens && len(resp.ToolCalls) == 0 {
 			maxRecovery := a.maxOutputRecovery
 			if maxRecovery <= 0 {
@@ -459,6 +466,22 @@ func (a *agent) ThinkAct(ctx context.Context) (*Result, error) {
 
 		// Execute tool calls
 		toolUses += a.execTools(ctx, resp.ToolCalls)
+
+		// After max_tokens + tool calls: if any tool input looks cut mid-JSON,
+		// nudge the model to reissue complete tool calls rather than silently
+		// continuing with possibly-corrupt results only.
+		if resp.StopReason == StopMaxTokens && anyTruncatedToolInput(resp.ToolCalls) {
+			maxRecovery := a.maxOutputRecovery
+			if maxRecovery <= 0 {
+				maxRecovery = 3
+			}
+			if maxOutputRecoveryCount >= maxRecovery {
+				return makeResult(StopMaxOutputRecoveryExhausted), nil
+			}
+			maxOutputRecoveryCount++
+			a.append(Message{Role: RoleUser, Content: TruncatedToolCallResumePrompt})
+			continue
+		}
 	}
 }
 
@@ -606,6 +629,21 @@ func (a *agent) executeToolTask(ctx context.Context, t agentToolTask) (result to
 	execCtx := WithToolCallID(ctx, t.call.ID)
 	content, err := t.tool.Execute(execCtx, params)
 	return toolTaskOutput{content, err}
+}
+
+// anyTruncatedToolInput reports whether any tool call looks cut mid-stream:
+// empty args or JSON that fails to parse. Used after StopMaxTokens so we can
+// re-prompt instead of treating a half-written tool call as final.
+func anyTruncatedToolInput(calls []ToolCall) bool {
+	for _, tc := range calls {
+		if strings.TrimSpace(tc.Input) == "" {
+			return true
+		}
+		if _, err := ParseToolInput(tc.Input); err != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // isParallelSafeToolCall reports tools that may fan out with siblings. Read-

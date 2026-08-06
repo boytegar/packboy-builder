@@ -138,6 +138,11 @@ type model struct {
 	// the next turn.
 	agentDisabledToolsSignature string
 
+	// agentMCPToolsSignature is the mcpToolsSignature() the live agent's toolset
+	// was built with; ensureAgentSession rebuilds when MCP tools land/leave so
+	// graph tools appear without waiting for an unrelated settings change.
+	agentMCPToolsSignature string
+
 	// agentRestartMessages is the last live main-agent chain captured before a
 	// deliberate stop. The UI conversation is a rendering model and can be
 	// empty or temporarily divergent, so it is not authoritative for rebuilding

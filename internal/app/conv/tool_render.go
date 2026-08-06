@@ -139,6 +139,10 @@ const (
 	nestedBodyPrefix    = "  ┊ "
 	nestedTrailerPrefix = "  └ "
 	bashPrompt          = "  $ "
+
+	// maxInlineDiffLines caps the rendered diff rows of an inline Edit/Write
+	// result so a large diff never floods the chat view.
+	maxInlineDiffLines = 10
 )
 
 func renderNestedReadResultInline(data ToolResultData) string {
@@ -335,10 +339,12 @@ func renderNestedFileChangeResultInline(data ToolResultData) string {
 	}
 
 	if details, ok := data.Details.(toolresult.FileChangeDetails); ok {
-		block, _ := renderStoredFileDiffIndented(details.UnifiedDiff, width, 0, nestedBodyPrefix)
+		block, hidden := renderStoredFileDiffIndented(details.UnifiedDiff, width, maxInlineDiffLines, nestedBodyPrefix)
 		sb.WriteString(block)
 		if details.TruncatedDiffLines > 0 {
 			sb.WriteString(truncatedStyle.Render(fmt.Sprintf(nestedBodyPrefix+"… diff truncated (%d more lines)", details.TruncatedDiffLines)) + "\n")
+		} else if hidden > 0 {
+			sb.WriteString(truncatedStyle.Render(fmt.Sprintf(nestedBodyPrefix+"… diff hidden (%d more lines)", hidden)) + "\n")
 		}
 		sb.WriteString(renderNestedToolTrailer(fileChangeSummary(details), toolResultStyle))
 		return sb.String()
@@ -472,13 +478,14 @@ func renderFileChangeResultInline(data ToolResultData) string {
 	if width <= 0 {
 		width = 80
 	}
-	// The diff renders in full: scrollback freezes, so anything hidden here
-	// would be lost for good. The only bound is the cap applied when the
-	// diff was stored, reported below from its structured count.
-	block, _ := RenderStoredFileDiff(details.UnifiedDiff, width, 0)
+	// The diff renders capped at maxInlineDiffLines so a large diff never
+	// floods the chat view (scrollback freezes, but the cap keeps it bounded).
+	block, hidden := RenderStoredFileDiff(details.UnifiedDiff, width, maxInlineDiffLines)
 	sb.WriteString(block)
 	if details.TruncatedDiffLines > 0 {
 		sb.WriteString(truncatedStyle.Render(fmt.Sprintf("     … diff truncated (%d more lines)", details.TruncatedDiffLines)) + "\n")
+	} else if hidden > 0 {
+		sb.WriteString(truncatedStyle.Render(fmt.Sprintf("     … diff hidden (%d more lines)", hidden)) + "\n")
 	}
 	return sb.String()
 }

@@ -51,10 +51,10 @@ func TestListModelsReturnsDynamicModels(t *testing.T) {
 
 func TestEstimateCost(t *testing.T) {
 	cost, ok := EstimateCost("MiniMax-M2.7", llm.Usage{
-		InputTokens:              1000000,
-		OutputTokens:             1000000,
-		CacheCreationInputTokens: 1000000,
-		CacheReadInputTokens:     1000000,
+		InputTokens:         1000000,
+		OutputTokens:        1000000,
+		CacheCreationTokens: 1000000,
+		CacheReadTokens:     1000000,
 	})
 	if !ok {
 		t.Fatal("expected pricing lookup to succeed")

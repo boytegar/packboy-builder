@@ -127,7 +127,7 @@ Only the tools that ship enabled are counted. Six of the fifteen registered tool
 **Method**
 
 - **Packboy Builder** — the system prompt is the committed golden fixture `internal/core/system/testdata/main_session.txt`; the tool schemas are the default model-facing set, `(&tool.Set{Disabled: setting.WithDefaultDisabledTools(nil)}).Tools()`, JSON-marshalled exactly as they go on the wire. Both counted with `tiktoken` (`cl100k_base`).
-- **Claude Code** — `claude -p "hi" --output-format json` in an empty directory, reading `usage.cache_creation_input_tokens` from its own reported usage (20,908 on `claude-opus-5[1m]`).
+- **Claude Code** — `claude -p "hi" --output-format json` in an empty directory, reading `usage.cache_creation_tokens` from its own reported usage (20,908 on `claude-opus-5[1m]`).
 
 **Caveats**
 

@@ -204,6 +204,11 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 		log.LogRequestCtx(ctx, c.name, opts.Model, opts)
 
 		state := streamutil.NewState(c.name)
+		state.PromptChars = streamutil.EstimatePromptChars(opts.SystemPrompt, opts.Messages)
+		// sawFinish tracks whether any candidate delivered a finish reason. A
+		// silent iterator end before one is a truncated stream, not a clean
+		// end_turn.
+		sawFinish := false
 
 		for result, err := range c.client.Models.GenerateContentStream(ctx, opts.Model, contents, config) {
 			if err != nil {
@@ -211,15 +216,14 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 				return
 			}
 			state.Count()
+			state.Progress(ctx, ch)
 
-			// Process candidates
 			for _, candidate := range result.Candidates {
 				if candidate.Content == nil {
 					continue
 				}
 
 				for _, part := range candidate.Content.Parts {
-					// Handle text (distinguish thinking from regular text)
 					if part.Text != "" {
 						if part.Thought {
 							state.EmitThinking(ctx, ch, part.Text)
@@ -228,7 +232,6 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 						}
 					}
 
-					// Handle function calls
 					if part.FunctionCall != nil {
 						fc := part.FunctionCall
 						argsJSON, _ := json.Marshal(fc.Args)
@@ -242,8 +245,8 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 					}
 				}
 
-				// Handle finish reason
 				if candidate.FinishReason != "" {
+					sawFinish = true
 					switch candidate.FinishReason {
 					case "STOP":
 						state.Response.StopReason = core.StopEndTurn
@@ -255,14 +258,22 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 				}
 			}
 
-			// Handle usage
+			// Handle usage (fantasy mapUsage shape: prompt + candidates + thoughts + cache read)
 			if result.UsageMetadata != nil {
-				state.UpdateUsage(int(result.UsageMetadata.PromptTokenCount), int(result.UsageMetadata.CandidatesTokenCount))
+				meta := result.UsageMetadata
+				state.UpdateUsage(int(meta.PromptTokenCount), int(meta.CandidatesTokenCount))
+				state.UpdateCacheUsage(0, int(meta.CachedContentTokenCount))
+				if meta.ThoughtsTokenCount > 0 {
+					state.Response.Usage.ReasoningTokens = int(meta.ThoughtsTokenCount)
+				}
+				if meta.TotalTokenCount > 0 {
+					state.Response.Usage.TotalTokens = int(meta.TotalTokenCount)
+				}
 			}
 		}
 
 		state.EnsureToolUseStopReason()
-		state.Finish(ctx, ch)
+		state.FinishOrTruncated(ctx, ch, sawFinish)
 	}()
 
 	return ch

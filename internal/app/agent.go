@@ -53,6 +53,15 @@ func (m *model) activePersona() *persona.Persona {
 	return p
 }
 
+// activePersonaName returns the display name of the active persona, or "" for
+// the built-in default. Views use it for the status-bar persona tag.
+func activePersonaName(m *model) string {
+	if p := m.activePersona(); p != nil {
+		return p.Name
+	}
+	return ""
+}
+
 // personaPrompt resolves the system.Persona (prompt-part overrides) to build
 // with — the active persona's three parts, or empty (the built-in default)
 // when no persona is selected.
@@ -411,6 +420,21 @@ func (m *model) disabledToolsSignature() string {
 	return strings.Join(names, "\x00")
 }
 
+// mcpToolsSignature returns a stable signature of the currently connected MCP
+// tool names. ensureAgentSession compares it against the live agent's build
+// snapshot so that when any MCP server connects/disconnects and its tools
+// land, the agent is rebuilt with the fresh toolset on the next turn instead
+// of running a stale toolset.
+func (m *model) mcpToolsSignature() string {
+	schemas := m.services.MCP.GetToolSchemas()
+	names := make([]string, 0, len(schemas))
+	for _, s := range schemas {
+		names = append(names, s.Name)
+	}
+	slices.Sort(names)
+	return strings.Join(names, "\x00")
+}
+
 // ensureAgentSession lazily starts the agent goroutine, preloading the
 // existing conversation. If pendingSend is non-empty and matches the
 // trailing user message in m.conv, it's dropped from the preload — the
@@ -425,7 +449,8 @@ func (m *model) ensureAgentSession(pendingSend string) (tea.Cmd, error) {
 		// the one choke point every turn passes through, so all drift sources
 		// are covered uniformly.
 		if m.selfLearnCapabilities() == m.agentEvolveCaps &&
-			m.disabledToolsSignature() == m.agentDisabledToolsSignature {
+			m.disabledToolsSignature() == m.agentDisabledToolsSignature &&
+			m.mcpToolsSignature() == m.agentMCPToolsSignature {
 			return nil, nil
 		}
 		m.StopAgentSession()
@@ -447,6 +472,8 @@ func (m *model) ensureAgentSession(pendingSend string) (tea.Cmd, error) {
 	// Record what the toolset was built with, for the drift check above.
 	m.agentEvolveCaps = m.selfLearnCapabilities()
 	m.agentDisabledToolsSignature = m.disabledToolsSignature()
+
+	m.agentMCPToolsSignature = m.mcpToolsSignature()
 
 	// Wire L1 self-learning *after* Agent.Start so the ReviewFunc can capture
 	// the live Agent + System for its fork. Builds nothing if both arms are

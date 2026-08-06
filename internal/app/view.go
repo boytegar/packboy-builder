@@ -275,6 +275,14 @@ func (m model) renderChatSection(activeContent, trackerView string) string {
 		parts = append(parts, spinnerView)
 	}
 
+	if m.conv.AnalyzingImages {
+		spinnerView := conv.ThinkingStyle.Render(m.conv.Spinner.View() + " Analyzing image...")
+		if len(parts) > 0 {
+			spinnerView = "\n" + spinnerView
+		}
+		parts = append(parts, spinnerView)
+	}
+
 	if compactView := conv.RenderCompactStatus(m.env.Width, m.conv.Spinner.View(), m.conv.Compact); compactView != "" {
 		parts = append(parts, compactView)
 	}
@@ -369,6 +377,7 @@ func (m model) renderModeStatus() string {
 	return conv.RenderModeStatus(conv.OperationModeParams{
 		Mode:              m.env.OperationMode,
 		Bypass:            m.env.SessionPermissions.IsBypassSafe(),
+		Persona:           activePersonaName(&m),
 		InputTokens:       m.env.InputTokens,
 		InputLimit:        kit.GetEffectiveInputLimit(m.services.LLM.Store(), m.env.CurrentModel),
 		ModelName:         modelName,

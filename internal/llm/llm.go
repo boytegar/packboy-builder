@@ -132,6 +132,12 @@ func (l *Client) Infer(ctx context.Context, req core.InferRequest) (<-chan core.
 				// retry without importing the provider SDKs.
 				send(core.Chunk{Err: llmerr.WrapStream(sc.Error)})
 				return
+			case ChunkTypeProgress:
+				// Keepalive only: emit a zero core.Chunk so streamInfer rearms
+				// its idle timer (Text/Thinking empty, Done false → no UI emit).
+				if !send(core.Chunk{}) {
+					return
+				}
 			}
 		}
 	}()
@@ -250,8 +256,10 @@ func (l *Client) AddUsage(usage Usage) {
 	l.mu.Lock()
 	l.tokens.InputTokens += usage.InputTokens
 	l.tokens.OutputTokens += usage.OutputTokens
-	l.tokens.CacheCreationInputTokens += usage.CacheCreationInputTokens
-	l.tokens.CacheReadInputTokens += usage.CacheReadInputTokens
+	l.tokens.TotalTokens += usage.TotalTokens
+	l.tokens.ReasoningTokens += usage.ReasoningTokens
+	l.tokens.CacheCreationTokens += usage.CacheCreationTokens
+	l.tokens.CacheReadTokens += usage.CacheReadTokens
 	l.mu.Unlock()
 }
 

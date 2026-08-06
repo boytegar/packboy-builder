@@ -20,9 +20,9 @@ func TestOnTokenUsageUsesLatestCallNotAccumulated(t *testing.T) {
 
 	// First infer: a large cached prompt. ctx = full prompt (fresh + cached).
 	m.OnTokenUsage(&core.InferResponse{Usage: core.Usage{
-		InputTokens:          500,
-		OutputTokens:         80,
-		CacheReadInputTokens: 140000,
+		InputTokens:     500,
+		OutputTokens:    80,
+		CacheReadTokens: 140000,
 	}})
 	if m.env.InputTokens != 140500 || m.env.OutputTokens != 80 {
 		t.Fatalf("first update = in:%d out:%d, want in:140500 out:80", m.env.InputTokens, m.env.OutputTokens)
@@ -31,9 +31,9 @@ func TestOnTokenUsageUsesLatestCallNotAccumulated(t *testing.T) {
 	// Second infer in the same turn: ctx must become THIS call's full context,
 	// not the sum of both calls (which would be 281800).
 	m.OnTokenUsage(&core.InferResponse{Usage: core.Usage{
-		InputTokens:          300,
-		OutputTokens:         25,
-		CacheReadInputTokens: 141000,
+		InputTokens:     300,
+		OutputTokens:    25,
+		CacheReadTokens: 141000,
 	}})
 	if m.env.InputTokens != 141300 || m.env.OutputTokens != 25 {
 		t.Fatalf("latest update = in:%d out:%d, want in:141300 out:25 (latest full context, not accumulated)", m.env.InputTokens, m.env.OutputTokens)
@@ -42,19 +42,19 @@ func TestOnTokenUsageUsesLatestCallNotAccumulated(t *testing.T) {
 
 // The ctx readout must count the cached prompt (reported separately in
 // Anthropic-style usage) so it reflects real window occupancy: the full prompt
-// is fresh + cache read + cache creation.
+// is fresh + cache read (cache creation is cost-only).
 func TestOnTokenUsageCountsCachedPromptInContext(t *testing.T) {
 	m := &model{}
 
 	m.OnTokenUsage(&core.InferResponse{Usage: core.Usage{
-		InputTokens:              500,
-		OutputTokens:             80,
-		CacheReadInputTokens:     140000,
-		CacheCreationInputTokens: 1000,
+		InputTokens:         500,
+		OutputTokens:        80,
+		CacheReadTokens:     140000,
+		CacheCreationTokens: 1000,
 	}})
 
-	if want := 141500; m.env.InputTokens != want {
-		t.Fatalf("context InputTokens = %d, want %d (fresh + cache read + cache creation)", m.env.InputTokens, want)
+	if want := 140500; m.env.InputTokens != want {
+		t.Fatalf("context InputTokens = %d, want %d (fresh + cache read)", m.env.InputTokens, want)
 	}
 }
 

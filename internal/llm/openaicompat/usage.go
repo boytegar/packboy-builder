@@ -3,7 +3,7 @@ package openaicompat
 // SplitInputTokens separates an OpenAI-family "full prompt" token count into
 // the fresh (uncached) and cached-read halves the rest of the app expects.
 // The Anthropic convention the app assumes is: InputTokens holds only fresh
-// tokens, and the cached prefix lives in CacheReadInputTokens. OpenAI's Chat
+// tokens, and the cached prefix lives in CacheReadTokens. OpenAI's Chat
 // Completions and Responses APIs instead report the whole prompt in a single
 // figure (prompt_tokens / input_tokens) and expose the cached slice under
 // *_tokens_details.cached_tokens; callers pass both and receive the split.

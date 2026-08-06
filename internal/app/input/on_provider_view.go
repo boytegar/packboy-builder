@@ -159,17 +159,17 @@ func (s *ProviderSelector) renderTabs() string {
 		{"Models", providerTabModels},
 		{"Providers", providerTabProviders},
 	}
-	if s.subagentsTabActive() {
-		tabs = append(tabs, struct {
-			name string
-			tab  providerTab
-		}{"Subagents", providerTabSubagents})
-	}
 	if s.visionTabActive() {
 		tabs = append(tabs, struct {
 			name string
 			tab  providerTab
 		}{"Vision", providerTabVision})
+	}
+	if s.subagentsTabActive() {
+		tabs = append(tabs, struct {
+			name string
+			tab  providerTab
+		}{"Subagents", providerTabSubagents})
 	}
 
 	var parts []string

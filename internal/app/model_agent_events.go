@@ -32,18 +32,19 @@ func (m *model) OnTokenUsage(resp *core.InferResponse) {
 	}
 
 	// Bottom-right context usage reflects the latest infer call, not a
-	// lifetime sum across the whole session. Use the full prompt size
-	// (fresh + cache read + cache creation) so the ctx readout matches real
-	// context-window occupancy rather than just the uncached delta.
+	// lifetime sum. Crush-aligned occupancy: InputTokens + CacheReadTokens
+	// (see InferResponse.TotalInputTokens).
 	m.env.InputTokens = resp.TotalInputTokens()
 	m.env.OutputTokens = resp.OutputTokens
 
 	if m.env.CurrentModel != nil {
 		usage := llm.Usage{
-			InputTokens:              resp.InputTokens,
-			OutputTokens:             resp.OutputTokens,
-			CacheCreationInputTokens: resp.CacheCreationInputTokens,
-			CacheReadInputTokens:     resp.CacheReadInputTokens,
+			InputTokens:         resp.InputTokens,
+			OutputTokens:        resp.OutputTokens,
+			TotalTokens:         resp.TotalTokens,
+			ReasoningTokens:     resp.ReasoningTokens,
+			CacheCreationTokens: resp.CacheCreationTokens,
+			CacheReadTokens:     resp.CacheReadTokens,
 		}
 		if cost, ok := llm.EstimateCost(m.env.CurrentModel.Provider, m.env.CurrentModel.ModelID, usage); ok {
 			m.env.ConversationCost = m.env.ConversationCost.Add(cost)
@@ -51,8 +52,6 @@ func (m *model) OnTokenUsage(resp *core.InferResponse) {
 	}
 }
 
-// HasRunningTasks gates the progress-hub tick's spinner batching. Like
-// needsSpinner it reads live runtime state, not persisted tracker status.
 func (m *model) HasRunningTasks() bool { return m.hasRunningBackgroundTask() }
 
 // OnAgentMessage observes the agent's MessageEvent echoes only. Every path that

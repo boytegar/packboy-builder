@@ -243,11 +243,20 @@ func TestResponsesInBandErrorCarriesRetryMarker(t *testing.T) {
 				context.Background(),
 				llm.CompletionOptions{Model: "gpt-5.4", Messages: []core.Message{{Role: core.RoleUser, Content: "hi"}}},
 			))
-			if len(chunks) != 1 || chunks[0].Type != llm.ChunkTypeError {
-				t.Fatalf("chunks = %#v, want one error chunk", chunks)
+			// The provider emits throttled Progress keepalives before the terminal
+			// error chunk; skip them and assert the error is present.
+			var errChunk *llm.StreamChunk
+			for i := range chunks {
+				if chunks[i].Type == llm.ChunkTypeError {
+					errChunk = &chunks[i]
+					break
+				}
+			}
+			if errChunk == nil {
+				t.Fatalf("chunks = %#v, want an error chunk", chunks)
 			}
 			var retryable core.RetryableError
-			if got := errors.As(chunks[0].Error, &retryable); got != tc.retryable {
+			if got := errors.As(errChunk.Error, &retryable); got != tc.retryable {
 				t.Fatalf("retryable = %v, want %v", got, tc.retryable)
 			}
 		})
@@ -363,15 +372,15 @@ func TestStreamResponsesSplitsCachedInputTokens(t *testing.T) {
 	if done.Usage.InputTokens != 100 {
 		t.Fatalf("InputTokens = %d, want 100 (1000 input - 900 cached)", done.Usage.InputTokens)
 	}
-	if done.Usage.CacheReadInputTokens != 900 {
-		t.Fatalf("CacheReadInputTokens = %d, want 900", done.Usage.CacheReadInputTokens)
+	if done.Usage.CacheReadTokens != 900 {
+		t.Fatalf("CacheReadTokens = %d, want 900", done.Usage.CacheReadTokens)
 	}
 	if done.Usage.OutputTokens != 20 {
 		t.Fatalf("OutputTokens = %d, want 20", done.Usage.OutputTokens)
 	}
 	// The fresh + cached split must still sum to the API's reported input_tokens
 	// so the bottom-bar ctx readout (TotalInputTokens) stays accurate.
-	total := done.Usage.InputTokens + done.Usage.CacheReadInputTokens + done.Usage.CacheCreationInputTokens
+	total := done.Usage.InputTokens + done.Usage.CacheReadTokens
 	if total != 1000 {
 		t.Fatalf("total input = %d, want 1000 (equal to API input_tokens)", total)
 	}

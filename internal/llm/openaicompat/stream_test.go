@@ -151,8 +151,8 @@ func TestStreamChatCompletionsSplitsCachedPromptTokens(t *testing.T) {
 	if done.Usage.InputTokens != 100 {
 		t.Fatalf("InputTokens = %d, want 100 (1000 prompt - 900 cached)", done.Usage.InputTokens)
 	}
-	if done.Usage.CacheReadInputTokens != 900 {
-		t.Fatalf("CacheReadInputTokens = %d, want 900", done.Usage.CacheReadInputTokens)
+	if done.Usage.CacheReadTokens != 900 {
+		t.Fatalf("CacheReadTokens = %d, want 900", done.Usage.CacheReadTokens)
 	}
 	if done.Usage.OutputTokens != 20 {
 		t.Fatalf("OutputTokens = %d, want 20", done.Usage.OutputTokens)

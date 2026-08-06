@@ -319,7 +319,7 @@ func TestFileStoreWritesExpectedEventShapes(t *testing.T) {
 			Turn:       1,
 			StopReason: "end_turn",
 			LatencyMs:  1234,
-			Usage:      &InferenceUsage{InputTokens: 100, OutputTokens: 20, CacheReadInputTokens: 10},
+			Usage:      &InferenceUsage{PromptTokens: 110, CompletionTokens: 20},
 		},
 	}); err != nil {
 		t.Fatalf("AppendInference(response): %v", err)
@@ -428,9 +428,8 @@ func TestFileStoreWritesExpectedEventShapes(t *testing.T) {
 	assertString(t, inference, "stopReason", "end_turn")
 	assertNumber(t, inference, "latencyMs", 1234)
 	usage := objectAt(t, inference, "usage")
-	assertNumber(t, usage, "inputTokens", 100)
-	assertNumber(t, usage, "outputTokens", 20)
-	assertNumber(t, usage, "cacheReadTokens", 10)
+	assertNumber(t, usage, "prompt_tokens", 110)
+	assertNumber(t, usage, "completion_tokens", 20)
 	assertNoTopLevel(t, inference, "systemDigest", "toolsDigest", "messageIds")
 
 	state := objectAt(t, records[9], "state")

@@ -8,7 +8,10 @@ import (
 // Record type values follow <entity>.<verb> (past tense), lowercase,
 // dot-separated. See docs/inspector.md for the full taxonomy.
 const (
-	SchemaVersion = "1"
+	// SchemaVersion 2: inference usage JSON aligns with crush —
+	// prompt_tokens / completion_tokens (was camelCase inputTokens/outputTokens
+	// plus separate cache fields).
+	SchemaVersion = "2"
 
 	SessionStarted       = "session.started"
 	SessionForked        = "session.forked"
@@ -146,11 +149,12 @@ type InferenceRecord struct {
 	Usage      *InferenceUsage `json:"usage,omitempty"`
 }
 
+// InferenceUsage is the per-call token snapshot on inference.responded.
+// Crush-aligned: prompt folds Input+CacheRead; completion is Output.
+// Cache creation / reasoning are cost-only and not persisted.
 type InferenceUsage struct {
-	InputTokens              int `json:"inputTokens"`
-	OutputTokens             int `json:"outputTokens"`
-	CacheCreationInputTokens int `json:"cacheCreateTokens,omitempty"`
-	CacheReadInputTokens     int `json:"cacheReadTokens,omitempty"`
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
 }
 
 // SystemSectionRecord carries the payload for system.section.added /

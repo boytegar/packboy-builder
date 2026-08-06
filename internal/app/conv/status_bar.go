@@ -202,7 +202,8 @@ func fitStatusSegments(segments []statusSegment, maxWidth, sepWidth int) []strin
 // OperationModeParams holds the parameters needed for rendering mode status.
 type OperationModeParams struct {
 	Mode              setting.OperationMode
-	Bypass            bool // orthogonal /yolo flag — rendered as a separate badge
+	Bypass            bool   // orthogonal /yolo flag — rendered as a separate badge
+	Persona           string // active persona name ("" = built-in default)
 	InputTokens       int
 	InputLimit        int
 	ModelName         string
@@ -250,7 +251,7 @@ func RenderModeStatus(params OperationModeParams) string {
 	// on the primary line's right edge stays visible.
 	if params.Bypass {
 		if bypassStatus := RenderBypassIndicator(); bypassStatus != "" {
-			return primary + "\n" + bypassStatus
+			return primary + "\n" + bypassStatus + RenderPersonaTag(params.Persona)
 		}
 	}
 	return primary
@@ -262,6 +263,15 @@ func RenderBypassIndicator() string {
 	style := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Error)
 	hint := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted).Render(" (/yolo)")
 	return "  " + style.Render("⚡ bypass on") + hint
+}
+
+// RenderPersonaTag renders the active persona name as a dim badge, used to the
+// right of the bypass indicator. Empty name returns "" (hide when default).
+func RenderPersonaTag(name string) string {
+	if name == "" {
+		return ""
+	}
+	return lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted).Render("· " + name)
 }
 
 // renderStatusCluster composes the status line's right-hand cluster, in

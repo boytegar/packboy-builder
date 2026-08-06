@@ -161,8 +161,8 @@ func TestWrapAndWrapStreamClassification(t *testing.T) {
 		wantStreamRetry bool
 		wantContext     bool
 	}{
-		{name: "issue GOAWAY text", err: issueGoAway, wantStreamRetry: true},
-		{name: "issue stream text", err: issueStream, wantStreamRetry: true},
+		{name: "issue GOAWAY text", err: issueGoAway, wantWrapRetry: true, wantStreamRetry: true},
+		{name: "issue stream text", err: issueStream, wantWrapRetry: true, wantStreamRetry: true},
 		{name: "ordinary opaque", err: errors.New("something opaque"), wantStreamRetry: true},
 		{name: "wrapped opaque", err: fmt.Errorf("reading response: %w", errors.New("opaque cause")), wantStreamRetry: true},
 		{name: "marked non-retryable", err: MarkNonRetryable(errors.New("semantic stream failure"))},

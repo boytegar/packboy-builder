@@ -85,9 +85,9 @@ func wrap(err error, retryUnknown bool) error {
 		return contextErr{err: err}
 	}
 	switch c, after := classify(err); c {
-	case retryable:
-		return retryErr{err: err}
-	case rateLimited:
+	case retryable, rateLimited:
+		// Both carry a provider hint when one was supplied: 429 sends
+		// Retry-After, and 503/overloaded responses often do too.
 		return retryErr{err: err, after: after}
 	case unknown:
 		if retryUnknown {
@@ -172,6 +172,14 @@ func classify(err error) (class, time.Duration) {
 		return knownFatal, 0
 	}
 
+	// A mid-stream SSE `error` event arrives inside an HTTP 200, so no status
+	// code is available — its payload type is the only signal. Check it before
+	// the typed-SDK branch: the OpenAI SDK's *ssestream.StreamError is a
+	// distinct type from *openai.Error and carries no status.
+	if c, ok := classifyStreamError(err); ok {
+		return c, 0
+	}
+
 	// Provider SDK typed errors carry an HTTP status — the most reliable
 	// signal. (openai.Error.Code is a string, so use .StatusCode.)
 	var anthErr *anthropic.Error
@@ -190,6 +198,13 @@ func classify(err error) (class, time.Duration) {
 		return c, 0
 	}
 
+	// HTTP/2 stream resets, connection errors, and GOAWAY frames come from the
+	// transport, not the application: the request was never judged on its
+	// merits, so a fresh connection may well succeed.
+	if IsTransportError(err) {
+		return retryable, 0
+	}
+
 	// Transport-level failures with no HTTP status: connection dropped,
 	// refused, reset, or a timeout. All worth a retry.
 	if isNetworkError(err) {
@@ -199,19 +214,59 @@ func classify(err error) (class, time.Duration) {
 	return unknown, 0
 }
 
-// fromStatus classifies an HTTP status code and extracts Retry-After for 429.
+// fromStatus classifies an HTTP status code, honoring the provider's explicit
+// x-should-retry override and extracting a Retry-After hint when present.
 func fromStatus(code int, resp *http.Response) (class, time.Duration) {
+	// Both the Anthropic and OpenAI SDKs let a provider override status-based
+	// retry policy with x-should-retry, and respect it over the status code.
+	// Mirror that: the provider knows things the status code cannot express
+	// (e.g. a 400 from an overloaded edge, or a permanently-doomed 500).
+	switch shouldRetryHeader(resp) {
+	case shouldRetryNo:
+		return knownFatal, 0
+	case shouldRetryYes:
+		return retryable, retryAfter(resp)
+	case shouldRetryUnset:
+		// Fall through to status-based classification.
+	}
+
 	switch {
 	case code == http.StatusTooManyRequests: // 429
 		return rateLimited, retryAfter(resp)
 	case code == http.StatusRequestTimeout, // 408
 		code == http.StatusConflict, // 409
 		code >= 500:                 // all 5xx, incl. Anthropic 529 overloaded
-		return retryable, 0
+		return retryable, retryAfter(resp)
 	default:
 		// 400/401/403/404/422, content policy, model-not-found, and
 		// context-window-exceeded all land here: retrying cannot help.
 		return knownFatal, 0
+	}
+}
+
+// shouldRetry is the tri-state result of reading the x-should-retry header.
+type shouldRetry int
+
+const (
+	shouldRetryUnset shouldRetry = iota
+	shouldRetryYes
+	shouldRetryNo
+)
+
+// shouldRetryHeader reads the provider's explicit x-should-retry override.
+// Only the exact values "true"/"false" count; anything else is treated as
+// absent so a malformed header cannot silently disable retries.
+func shouldRetryHeader(resp *http.Response) shouldRetry {
+	if resp == nil {
+		return shouldRetryUnset
+	}
+	switch strings.ToLower(strings.TrimSpace(resp.Header.Get("X-Should-Retry"))) {
+	case "true":
+		return shouldRetryYes
+	case "false":
+		return shouldRetryNo
+	default:
+		return shouldRetryUnset
 	}
 }
 
@@ -241,11 +296,22 @@ func isNetworkError(err error) bool {
 	return errors.As(err, &netErr)
 }
 
-// retryAfter parses a Retry-After header (delta-seconds or HTTP-date). Returns
-// 0 when absent or unparseable.
+// retryAfter parses the provider's retry hint. Headers are tried in order of
+// precedence, matching the Anthropic and OpenAI SDKs' own retry logic:
+//
+//  1. Retry-After-Ms — millisecond precision; the only header that can express
+//     a sub-second wait, so a rate limiter's exact reset is not rounded up to
+//     a full second.
+//  2. Retry-After — delta-seconds or an HTTP-date.
+//
+// Returns 0 when no header is present or parseable, leaving the caller on its
+// own backoff schedule.
 func retryAfter(resp *http.Response) time.Duration {
 	if resp == nil {
 		return 0
+	}
+	if d, ok := retryAfterMs(resp.Header.Get("Retry-After-Ms")); ok {
+		return d
 	}
 	v := strings.TrimSpace(resp.Header.Get("Retry-After"))
 	if v == "" {
@@ -263,4 +329,22 @@ func retryAfter(resp *http.Response) time.Duration {
 		}
 	}
 	return 0
+}
+
+// retryAfterMs parses a Retry-After-Ms header value. ok is false when the
+// header is absent or unparseable so the caller falls through to Retry-After;
+// a non-positive value is a valid "retry now" and reports ok with 0.
+func retryAfterMs(v string) (time.Duration, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, false
+	}
+	ms, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, false
+	}
+	if ms <= 0 {
+		return 0, true
+	}
+	return time.Duration(ms * float64(time.Millisecond)), true
 }

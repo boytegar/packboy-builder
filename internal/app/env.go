@@ -28,9 +28,9 @@ type env struct {
 	// InputTokens / OutputTokens track the latest infer call only.
 	// They back the bottom-right context display, so they reflect the most
 	// recent prompt/output size rather than a turn or session aggregate.
-	// InputTokens is the FULL prompt size (fresh + cached tokens) so the
-	// context readout matches window occupancy even when prompt caching is
-	// active — see InferResponse.TotalInputTokens.
+	// InputTokens is crush-aligned prompt occupancy (Input + CacheRead) so the
+	// context readout matches window occupancy under prompt caching —
+	// see InferResponse.TotalInputTokens.
 	InputTokens  int
 	OutputTokens int
 	// ConversationCost is the session-cumulative spend shown in the status

@@ -187,17 +187,25 @@ func (c *Client) streamResponses(ctx context.Context, opts llm.CompletionOptions
 
 		// Create streaming request
 		stream := c.client.Responses.NewStreaming(ctx, params)
+		defer stream.Close() // release the HTTP body on every exit
 
 		state := streamutil.NewState(c.name)
+		state.PromptChars = streamutil.EstimatePromptChars(opts.SystemPrompt, opts.Messages)
 
 		// Track tool calls by item ID
 		toolCalls := make(map[string]*core.ToolCall)
 		hasToolCalls := false
+		// sawTerminal is set once the Responses API delivered its terminal event
+		// (response.completed / response.incomplete). A socket close before one
+		// arrives is a truncated stream and must be retried, not accepted as a
+		// clean end_turn.
+		sawTerminal := false
 
 		// Read stream events
 		for stream.Next() {
 			event := stream.Current()
 			state.Count()
+			state.Progress(ctx, ch)
 
 			switch event.Type {
 			case "response.output_text.delta":
@@ -243,6 +251,7 @@ func (c *Client) streamResponses(ctx context.Context, opts llm.CompletionOptions
 			case "response.completed":
 				completed := event.AsResponseCompleted()
 				resp := completed.Response
+				sawTerminal = true
 
 				// Capture reasoning items so they can be echoed back on the next
 				// stateless (store=false) turn; only the subscription backend
@@ -285,6 +294,21 @@ func (c *Client) streamResponses(ctx context.Context, opts llm.CompletionOptions
 					state.Response.StopReason = core.StopReason(resp.Status)
 				}
 
+			case "response.incomplete":
+				// A max_tokens / interrupted response is still a terminal event:
+				// the stream is complete even though the response ended early.
+				sawTerminal = true
+				state.Response.StopReason = core.StopMaxTokens
+				incomplete := event.AsResponseIncomplete()
+				if u := incomplete.Response.Usage; u.InputTokens != 0 || u.OutputTokens != 0 {
+					// Same split as response.completed — raw InputTokens is the full
+					// prompt; CachedTokens must move to CacheRead or TotalInputTokens
+					// double-counts and the status bar / cost skew.
+					fresh, cached := openaicompat.SplitInputTokens(int(u.InputTokens), int(u.InputTokensDetails.CachedTokens))
+					state.UpdateUsage(fresh, int(u.OutputTokens))
+					state.UpdateCacheUsage(0, cached)
+				}
+
 			case "error":
 				errEvent := event.AsError()
 				err := fmt.Errorf("responses API error: %s", errEvent.Message)
@@ -305,7 +329,9 @@ func (c *Client) streamResponses(ctx context.Context, opts llm.CompletionOptions
 
 		state.AddToolCallsByKey(toolCalls)
 		state.EnsureToolUseStopReason()
-		state.Finish(ctx, ch)
+		// Require a terminal event so a silent EOF mid-SSE is retried instead of
+		// surfacing as a clean end_turn (mirrors fantasy's sawTerminalEvent gate).
+		state.FinishOrTruncated(ctx, ch, sawTerminal)
 	}()
 
 	return ch

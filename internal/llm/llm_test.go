@@ -316,17 +316,17 @@ func TestOutputLimitFromProviderListModelsError(t *testing.T) {
 func TestAddUsageIncludesCacheTokens(t *testing.T) {
 	l := &Client{}
 	l.AddUsage(Usage{
-		InputTokens:              10,
-		OutputTokens:             5,
-		CacheCreationInputTokens: 7,
-		CacheReadInputTokens:     3,
+		InputTokens:         10,
+		OutputTokens:        5,
+		CacheCreationTokens: 7,
+		CacheReadTokens:     3,
 	})
 
 	got := l.Tokens()
 	if got.InputTokens != 10 || got.OutputTokens != 5 {
 		t.Fatalf("unexpected base usage: %+v", got)
 	}
-	if got.CacheCreationInputTokens != 7 || got.CacheReadInputTokens != 3 {
+	if got.CacheCreationTokens != 7 || got.CacheReadTokens != 3 {
 		t.Fatalf("unexpected cache usage: %+v", got)
 	}
 }
@@ -484,5 +484,54 @@ func TestFakeLLMCustomNames(t *testing.T) {
 	}
 	if fake.ModelID() != "gpt-4" {
 		t.Errorf("expected 'gpt-4', got '%s'", fake.ModelID())
+	}
+}
+
+// progressProvider emits one Progress keepalive then a Done chunk.
+type progressProvider struct {
+	inner mockLLMProvider
+}
+
+func (p *progressProvider) Stream(ctx context.Context, opts CompletionOptions) <-chan StreamChunk {
+	ch := make(chan StreamChunk, 3)
+	go func() {
+		defer close(ch)
+		ch <- StreamChunk{Type: ChunkTypeProgress}
+		ch <- StreamChunk{Type: ChunkTypeProgress}
+		ch <- StreamChunk{Type: ChunkTypeDone, Response: &CompletionResponse{Content: "ok", StopReason: "end_turn"}}
+	}()
+	return ch
+}
+
+func (p *progressProvider) ListModels(ctx context.Context) ([]ModelInfo, error) {
+	return p.inner.ListModels(ctx)
+}
+func (p *progressProvider) Name() string { return "progress" }
+
+func TestInferProgressKeepalivesBecomeEmptyCoreChunks(t *testing.T) {
+	client := NewClient(&progressProvider{}, "test-model", 1)
+	chunks, err := client.Infer(context.Background(), core.InferRequest{})
+	if err != nil {
+		t.Fatalf("Infer() error = %v", err)
+	}
+
+	// Two progress chunks must forward as content-free core.Chunks (rearming the
+	// idle timer) without touching Done/Text, then the Done chunk arrives.
+	var progressSeen, doneSeen bool
+	for c := range chunks {
+		if c.Done {
+			doneSeen = true
+			if c.Response == nil || c.Response.Content != "ok" {
+				t.Fatalf("done chunk %#v", c)
+			}
+		} else if c.Text == "" && c.Thinking == "" && c.Err == nil {
+			progressSeen = true
+		}
+	}
+	if !progressSeen {
+		t.Fatal("expected at least one progress keepalive forwarded as a content-free chunk")
+	}
+	if !doneSeen {
+		t.Fatal("expected a done chunk")
 	}
 }

@@ -69,3 +69,26 @@ func TestRegistryConnectingState(t *testing.T) {
 
 	t.Log("All connecting state transitions verified OK")
 }
+
+func TestRegistryReadyAndAnyConnecting(t *testing.T) {
+	configs := map[string]ServerConfig{
+		"server1": {Name: "server1", URL: "http://example.com/mcp"},
+	}
+	reg := NewRegistryForTest(configs)
+
+	if reg.Ready("server1") {
+		t.Fatal("expected not ready before connect")
+	}
+	if reg.AnyConnecting() {
+		t.Fatal("expected not connecting initially")
+	}
+
+	reg.SetConnecting("server1", true)
+	if !reg.AnyConnecting() {
+		t.Fatal("expected connecting after SetConnecting")
+	}
+	reg.SetConnecting("server1", false)
+	if reg.AnyConnecting() {
+		t.Fatal("expected not connecting after clear")
+	}
+}

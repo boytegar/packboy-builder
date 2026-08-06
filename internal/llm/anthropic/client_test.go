@@ -1,6 +1,10 @@
 package anthropic
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"testing"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -230,5 +234,23 @@ func TestSanitizeToolResults_AllToolUsesOrphaned(t *testing.T) {
 	// All tool_calls should be stripped
 	if len(result[0].ToolCalls) != 0 {
 		t.Fatalf("expected 0 tool_calls after sanitization, got %d", len(result[0].ToolCalls))
+	}
+}
+
+func TestIsRetriableStreamParseError(t *testing.T) {
+	if isRetriableStreamParseError(nil) {
+		t.Fatal("nil not retriable")
+	}
+	if isRetriableStreamParseError(errors.New("401 unauthorized")) {
+		t.Fatal("auth error must Fail, not salvage")
+	}
+	if !isRetriableStreamParseError(&json.SyntaxError{}) {
+		t.Fatal("json.SyntaxError is retriable parse")
+	}
+	if !isRetriableStreamParseError(errors.New("unexpected end of JSON input")) {
+		t.Fatal("unexpected end of JSON input is retriable")
+	}
+	if !isRetriableStreamParseError(fmt.Errorf("wrap: %w", io.ErrUnexpectedEOF)) {
+		t.Fatal("ErrUnexpectedEOF is retriable")
 	}
 }

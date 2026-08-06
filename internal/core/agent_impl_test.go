@@ -147,9 +147,9 @@ func TestCompactEmitsStartBeforeBoundary(t *testing.T) {
 // uncached delta InputTokens holds under prompt caching (see TotalInputTokens).
 func TestCompactionCheckCountsCachedPromptTokens(t *testing.T) {
 	resp := InferResponse{Usage: Usage{
-		InputTokens:              1_200,
-		CacheReadInputTokens:     170_000,
-		CacheCreationInputTokens: 20_000,
+		InputTokens:         1_200,
+		CacheReadTokens:     190_000,
+		CacheCreationTokens: 20_000, // cost-only; excluded from TotalInputTokens
 	}}
 
 	const limit = 200_000
@@ -696,5 +696,27 @@ func TestCancelDuringToolBatchStopsTheRemainingCalls(t *testing.T) {
 	}
 	if n := ranOnDead.Load(); n != 0 {
 		t.Errorf("%d of %d tool calls executed after the turn was cancelled", n, ran.Load())
+	}
+}
+
+func TestAnyTruncatedToolInput(t *testing.T) {
+	if anyTruncatedToolInput(nil) {
+		t.Fatal("nil calls should not be truncated")
+	}
+	if anyTruncatedToolInput([]ToolCall{{Name: "Read", Input: `{"path":"x"}`}}) {
+		t.Fatal("valid JSON should not be truncated")
+	}
+	if !anyTruncatedToolInput([]ToolCall{{Name: "Read", Input: ""}}) {
+		t.Fatal("empty input is truncated")
+	}
+	if !anyTruncatedToolInput([]ToolCall{{Name: "Read", Input: `{"path":`}}) {
+		t.Fatal("cut JSON is truncated")
+	}
+	// mixed: one good, one cut
+	if !anyTruncatedToolInput([]ToolCall{
+		{Name: "Read", Input: `{"path":"ok"}`},
+		{Name: "Edit", Input: `{"path":"x","old`},
+	}) {
+		t.Fatal("any cut call should flag the batch")
 	}
 }
