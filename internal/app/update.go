@@ -331,6 +331,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleStopHookResult(msg)
 	case mainNoticeMsg:
 		return m, m.onMainNotice(msg.notice)
+	case input.MCPToolsSyncedMsg:
+		// MCP tools finished syncing (server connected). Stop the agent so
+		// ensureAgentSession rebuilds on the next user message with a toolset that
+		// includes this server's tools. Tools are ready before the agent opens —
+		// the agent is never built alongside an in-progress MCP connect.
+		if m.services.Agent.Active() {
+			m.StopAgentSession()
+		}
+		return m, nil
 	case selfLearnStartedMsg:
 		return m, m.onSelfLearnStarted()
 	case selflearnTickMsg:

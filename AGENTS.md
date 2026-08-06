@@ -100,6 +100,10 @@ scanning cannot.
 
 Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 
+### MCP tools sync before the agent opens
+
+The harness never opens the agent alongside an MCP connect. When any MCP server finishes connecting, it **rebuilds the agent** so the model's toolset always includes that server's tools (`mcpToolsSignature` drift check). Tool schema sync completes first; the agent is built after — so third-party MCP tools (e.g. code-review-graph) are present and callable from the first turn, and the `researcher` subagent uses them (`query_graph_tool`, `semantic_search_nodes_tool`) instead of scanning files from zero.
+
 ### Key Tools
 
 | Tool | Use when |

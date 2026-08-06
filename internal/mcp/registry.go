@@ -770,6 +770,26 @@ func (r *Registry) SetConnecting(name string, val bool) {
 	}
 }
 
+// Ready reports whether the named server has a live connected client.
+func (r *Registry) Ready(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	client, ok := r.clients[name]
+	return ok && client.IsConnected()
+}
+
+// AnyConnecting reports whether any server is mid-connect.
+func (r *Registry) AnyConnecting() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, v := range r.connecting {
+		if v {
+			return true
+		}
+	}
+	return false
+}
+
 // SetConnectError stores a connection error for a server that failed to connect.
 func (r *Registry) SetConnectError(name string, errMsg string) {
 	r.mu.Lock()

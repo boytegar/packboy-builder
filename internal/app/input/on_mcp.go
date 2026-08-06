@@ -96,6 +96,14 @@ type mcpConnectResultMsg struct {
 	Err        error
 }
 
+// MCPToolsSyncedMsg signals that an MCP server finished connecting and its
+// tools are now available. The app layer rebuilds the agent on receipt so the
+// model always sees a toolset that includes every connected MCP server's tools
+// — the agent is only opened after MCP tools are in place, never alongside them.
+type MCPToolsSyncedMsg struct {
+	ServerName string
+}
+
 // mcpDisconnectMsg is sent when disconnecting from a server
 type mcpDisconnectMsg struct {
 	ServerName string
@@ -501,6 +509,12 @@ func UpdateMCP(deps OverlayDeps, state *MCPState, msg tea.Msg) (tea.Cmd, bool) {
 			content := fmt.Sprintf("Failed to connect to '%s': %v", msg.ServerName, msg.Err)
 			deps.Conv.Append(core.ChatMessage{Role: core.RoleNotice, Content: content})
 			return tea.Batch(deps.CommitMessages()...), true
+		}
+		// Every successful connect makes new MCP tools available. Signal the app
+		// layer so it rebuilds the agent with the fresh toolset — tools sync first,
+		// agent opens after.
+		if msg.Success {
+			return func() tea.Msg { return MCPToolsSyncedMsg{ServerName: msg.ServerName} }, true
 		}
 		return nil, true
 

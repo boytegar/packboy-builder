@@ -377,6 +377,7 @@ func (m model) renderModeStatus() string {
 	return conv.RenderModeStatus(conv.OperationModeParams{
 		Mode:              m.env.OperationMode,
 		Bypass:            m.env.SessionPermissions.IsBypassSafe(),
+		Persona:           activePersonaName(&m),
 		InputTokens:       m.env.InputTokens,
 		InputLimit:        kit.GetEffectiveInputLimit(m.services.LLM.Store(), m.env.CurrentModel),
 		ModelName:         modelName,

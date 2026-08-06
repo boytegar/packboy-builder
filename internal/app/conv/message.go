@@ -37,6 +37,17 @@ const (
 	autoCompactThreshold = core.AutoCompactThresholdPercent
 )
 
+// contentWrapWidth is the plain-wrap column budget for a body of text given the
+// available surface width. It holds back streamWrapReserve cols (gutter + last
+// column slack) and never exceeds the available width: when the terminal is
+// narrower than minWrapWidth the wrap collapses to fit instead of flooring up
+// past the real terminal width, which would make lipgloss emit lines wider than
+// the surface and the terminal's own re-wrap would add downward lines — the
+// narrower the terminal, the more extra lines. It never drops below 1.
+func contentWrapWidth(width int) int {
+	return max(width-streamWrapReserve, 1)
+}
+
 // toolResultIcon returns the icon for tool results based on error state.
 func toolResultIcon(isError bool) string {
 	if isError {
@@ -271,7 +282,7 @@ func mutedThinkingBody(thinking string, width int, md *MDRenderer) string {
 		}
 	}
 	if text == "" {
-		wrapWidth := max(width-streamWrapReserve, minWrapWidth)
+		wrapWidth := contentWrapWidth(width)
 		text = lipgloss.NewStyle().Width(wrapWidth).Render(thinking)
 	}
 	var lines []string
@@ -398,7 +409,7 @@ func formatAssistantContent(params AssistantParams) string {
 		}
 		// Plain-wrap the streaming tail so its \n-line count matches the height
 		// calc; reserve streamWrapReserve cols (gutter + last-column slack).
-		wrapWidth := max(params.Width-streamWrapReserve, minWrapWidth)
+		wrapWidth := contentWrapWidth(params.Width)
 		return lipgloss.NewStyle().Width(wrapWidth).Render(params.Content)
 	}
 
