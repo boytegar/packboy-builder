@@ -3,6 +3,20 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v1.22.9] - 2026-08-06
+
+### Added
+- Parallel tool execution: read-only and Agent tool calls now fan out concurrently (per-call safety partitioning), while side-effect tools stay serial. Mixed batches no longer gate on the slowest sibling.
+- Persona overlay is now applied in the TUI UI surface.
+- Structured LLM error layer (`llmerr`) for streaming and transport failures (parse, streaming, context-window classification), surfaced consistently across all providers.
+
+### Changed
+- Refactor input/output token aggregation to match runtime usage accounting: prompt = input + cache-read, completion = completion only; cost still bills all four token classes.
+- Improved image analysis text output.
+
+### Fixed
+- Correct input/output token reporting to avoid double-counting cache tokens.
+
 ## [v1.22.8] - 2026-08-05
 
 ### Added
