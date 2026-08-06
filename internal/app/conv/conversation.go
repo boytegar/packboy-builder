@@ -15,12 +15,12 @@ func (s *StreamState) Stop() {
 }
 
 type ConversationModel struct {
-	Messages       []core.ChatMessage
-	CommittedCount int
-	Stream         StreamState
-	Compact        CompactState
-	Modal          ModalState
-	Tool           ToolExecState
+	Messages        []core.ChatMessage
+	CommittedCount  int
+	Stream          StreamState
+	Compact         CompactState
+	Modal           ModalState
+	Tool            ToolExecState
 	AnalyzingImages bool
 }
 
