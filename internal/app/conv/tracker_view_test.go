@@ -71,7 +71,7 @@ func TestRenderTaskAnimatesInProgressItem(t *testing.T) {
 	// both the solid (●) and dim (◌) phases.
 	var hasSolid, hasDim bool
 	for blink := range 4 * trackerPulseTicks {
-		frame := stripANSI(renderItem(task, itemRunning, 80, 2, nil, blink, nil))
+		frame := stripANSI(renderItem(task, itemRunning, 80, 2, nil, blink, nil, false, false))
 		if strings.Contains(frame, "●") {
 			hasSolid = true
 		}
@@ -123,9 +123,9 @@ func TestRenderTrackerListOrdersByID(t *testing.T) {
 func TestRenderTaskHoldsStillWhenStalled(t *testing.T) {
 	task := &todo.Item{ID: "1", Subject: "Fix auth module", Status: todo.StatusInProgress}
 
-	first := stripANSI(renderItem(task, itemStalled, 80, 2, nil, 0, nil))
+	first := stripANSI(renderItem(task, itemStalled, 80, 2, nil, 0, nil, false, false))
 	for blink := range 4 * trackerPulseTicks {
-		if frame := stripANSI(renderItem(task, itemStalled, 80, 2, nil, blink, nil)); frame != first {
+		if frame := stripANSI(renderItem(task, itemStalled, 80, 2, nil, blink, nil, false, false)); frame != first {
 			t.Fatalf("stalled task animated across frames:\n%q\n%q", first, frame)
 		}
 	}
@@ -210,8 +210,8 @@ func TestRenderItemTintsAgentOwnedRows(t *testing.T) {
 	item := &todo.Item{ID: "1", Subject: "Audit deps", Status: todo.StatusInProgress, Owner: "explorer"}
 	colors := map[string]string{"explorer": "yellow"}
 
-	plain := renderItem(item, itemRunning, 80, 2, nil, 0, nil)
-	tinted := renderItem(item, itemRunning, 80, 2, nil, 0, colors)
+	plain := renderItem(item, itemRunning, 80, 2, nil, 0, nil, false, false)
+	tinted := renderItem(item, itemRunning, 80, 2, nil, 0, colors, false, false)
 
 	if stripANSI(plain) != stripANSI(tinted) {
 		t.Fatalf("agent tint changed the row text, not just its color:\n  %q\n  %q", stripANSI(plain), stripANSI(tinted))

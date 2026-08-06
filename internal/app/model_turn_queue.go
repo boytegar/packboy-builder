@@ -64,19 +64,16 @@ func (m *model) releaseQueuedMessage() (tea.Cmd, bool) {
 	if !ok {
 		return nil, false
 	}
-	if m.imagesBlockedForModel(item.Images) {
-		// Hand the message back instead of dropping it — the notice tells the
-		// user to remove the image or switch models.
+	if len(item.Images) > 0 && !m.visionModelConfigured() && m.imagesBlockedForModel(item.Images) {
+		// Vision pre-pass unavailable AND the main model is text-only — hand the
+		// message back instead of dropping it. The notice tells the user to
+		// remove the image, switch models, or configure a VisionModel.
 		m.userInput.ReturnToTextarea(item.Content, item.Images)
 		return tea.Batch(m.CommitMessages()...), true
 	}
-	m.conv.Append(core.ChatMessage{Role: core.RoleUser, Content: item.Content, Images: item.Images})
-	svc, content, images := m.services.Agent, item.Content, item.Images
-	send := func() tea.Msg {
-		svc.Send(content, images)
-		return nil
-	}
-	return tea.Batch(append(m.CommitMessages(), send)...), true
+	m.userInput.RestoreImages(item.Images)
+	cmd := m.dispatchSubmission(item.Content)
+	return cmd, true
 }
 
 func (m *model) drainTurnQueues() (tea.Cmd, bool) {

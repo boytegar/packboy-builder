@@ -137,6 +137,11 @@ var (
 	trackerCompletedStyle = lipgloss.NewStyle().
 				Foreground(kit.CurrentTheme.Success)
 
+	// focusCursorStyle marks the tracker row the keyboard cursor is on.
+	focusCursorStyle = lipgloss.NewStyle().
+				Foreground(kit.CurrentTheme.Primary).
+				Bold(true)
+
 	PendingImageStyle = lipgloss.NewStyle().
 				Foreground(kit.CurrentTheme.Primary)
 

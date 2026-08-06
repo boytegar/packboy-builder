@@ -62,5 +62,23 @@ func AnalyzeImages(ctx context.Context, store *Store, ref string, images []core.
 	if err != nil {
 		return "", fmt.Errorf("vision analysis failed: %w", err)
 	}
-	return strings.TrimSpace(resp.Content), nil
+	// Some reasoning-heavy vision models (e.g. stepfun-3.7-flash on a custom
+	// OpenAI-compat gateway) emit the description in the thinking/reasoning
+	// channel with an empty Content. Fall back to that rather than silently
+	// returning "" (which the caller treats as "no analysis").
+	if out := strings.TrimSpace(resp.Content); out != "" {
+		return out, nil
+	}
+	if out := strings.TrimSpace(resp.Thinking); out != "" {
+		return out, nil
+	}
+	for _, ri := range resp.Reasoning {
+		if r := strings.TrimSpace(ri.Summary); r != "" {
+			return r, nil
+		}
+		if r := strings.TrimSpace(ri.EncryptedContent); r != "" {
+			return r, nil
+		}
+	}
+	return "", nil
 }

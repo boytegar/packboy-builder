@@ -85,6 +85,20 @@ func (m *model) handleTextareaShortcut(msg tea.KeyMsg) (tea.Cmd, bool) {
 
 	case "alt+t", "alt+T":
 		m.conv.ShowTasks = !m.conv.ShowTasks
+		if !m.conv.ShowTasks {
+			m.expandedTrackerItem = ""
+			m.trackerFocusIdx = -1
+		}
+		return nil, true
+
+	case "alt+w", "alt+W":
+		// Cycle keyboard focus across tracker rows (dropdown navigation).
+		m.cycleTrackerFocus()
+		return nil, true
+
+	case "alt+e", "alt+E":
+		// Toggle the dropdown of the focused tracker row.
+		m.toggleFocusedTracker()
 		return nil, true
 
 	case "ctrl+o":
@@ -226,4 +240,39 @@ func (m *model) handleCtrlOSingleTick() tea.Cmd {
 func (m *model) expandCollapseAll() tea.Cmd {
 	m.conv.ToggleAllExpandable()
 	return nil
+}
+
+// cycleTrackerFocus moves the keyboard cursor to the next visible tracker row,
+// wrapping around. Rows are counted from the tracker's live item list; a list
+// that shrank under us clamps instead of running past the end.
+func (m *model) cycleTrackerFocus() {
+	items := m.services.Tracker.List()
+	if len(items) == 0 {
+		m.trackerFocusIdx = -1
+		return
+	}
+	if m.trackerFocusIdx < 0 || m.trackerFocusIdx >= len(items) {
+		m.trackerFocusIdx = 0
+		return
+	}
+	m.trackerFocusIdx = (m.trackerFocusIdx + 1) % len(items)
+}
+
+// toggleFocusedTracker opens or closes the dropdown of the tracker row the
+// keyboard cursor is on. With no focus yet it focuses the first row and opens
+// it; a repeated press closes it again.
+func (m *model) toggleFocusedTracker() {
+	items := m.services.Tracker.List()
+	if len(items) == 0 {
+		return
+	}
+	if m.trackerFocusIdx < 0 || m.trackerFocusIdx >= len(items) {
+		m.trackerFocusIdx = 0
+	}
+	item := items[m.trackerFocusIdx]
+	if m.expandedTrackerItem == item.ID {
+		m.expandedTrackerItem = ""
+		return
+	}
+	m.expandedTrackerItem = item.ID
 }

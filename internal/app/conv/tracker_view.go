@@ -42,7 +42,22 @@ type TrackerListParams struct {
 	// agent's launch line in the flow. Plain user todos have no owner and keep
 	// the status palette.
 	AgentColors map[string]string
+	// Expanded is the ID of the item whose detail dropdown is open, or "" when
+	// none is. When set, renderItem renders the expandable row as open (▾) and
+	// appends up to MaxSubagentLines detail lines below it — one per line of
+	// activity reported by DetailLines.
+	Expanded string
+	// DetailLines reports the subagent lines to show under an expanded item. It
+	// returns at most MaxSubagentLines entries; the caller caps for us.
+	DetailLines func(itemID string) []string
+	// FocusedIdx is the index of the tracker row that the keyboard cursor is
+	// on, or -1 when nothing is focused. The focused row gets a `>` highlight.
+	FocusedIdx int
 }
+
+// MaxSubagentLines caps how many detail lines a dropdown may show. The panel
+// stays a compact status strip; a huge tail would swallow the chat above it.
+const MaxSubagentLines = 15
 
 // RenderTrackerList renders the tracker panel above the input area.
 // Returns empty string when there are no items, or all are completed and idle.
@@ -87,12 +102,12 @@ func RenderTrackerList(params TrackerListParams) string {
 
 	idWidth := itemIDWidth(visible)
 
-	// Classify only the rows actually drawn. Liveness is the expensive input and
-	// the header above does not need it — progress counts finished work, which
-	// no worker can still be advancing.
-	for _, t := range visible {
+	for i, t := range visible {
 		phase := phaseOf(t, params.Executing != nil && params.Executing(t))
-		sb.WriteString(renderItem(t, phase, params.Width, idWidth, params.Blockers, params.Blink, params.AgentColors))
+		sb.WriteString(renderItem(t, phase, params.Width, idWidth, params.Blockers, params.Blink, params.AgentColors, params.Expanded == t.ID, params.FocusedIdx == folded+i))
+		if params.Expanded == t.ID && params.DetailLines != nil {
+			sb.WriteString(renderDropdown(params.DetailLines(t.ID), params.Width, idWidth))
+		}
 	}
 
 	return sb.String()
@@ -164,12 +179,25 @@ func activeText(t *todo.Item, maxTextLen int) string {
 	return kit.TruncateText(text, maxTextLen)
 }
 
-func renderItem(t *todo.Item, phase itemPhase, width, idWidth int, blockers func(string) []string, blink int, agentColors map[string]string) string {
+func renderItem(t *todo.Item, phase itemPhase, width, idWidth int, blockers func(string) []string, blink int, agentColors map[string]string, expanded, focused bool) string {
 	indent := "  "
+	if focused {
+		// A focused row leads with `>` so keyboard navigation has a visible
+		// cursor target in the list.
+		indent = focusCursorStyle.Render(">") + " "
+	}
 	idTag := fmt.Sprintf("%-*s", idWidth, "#"+t.ID)
 	maxTextLen := max(width-len(indent)-idWidth-8, 12)
 	subject := kit.TruncateText(t.Subject, maxTextLen)
 	mutedStyle := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted)
+
+	// Dropdown affordance: ▸ collapsed, ▾ open. Painted dim so it reads as a
+	// control, not content alarm.
+	drop := "▸"
+	if expanded {
+		drop = "▾"
+	}
+	dropMarker := mutedStyle.Render("  " + drop)
 
 	// A row owned by a background agent wears that agent's color (icon + text),
 	// mirroring its launch line in the flow; a plain todo keeps the status
@@ -187,17 +215,17 @@ func renderItem(t *todo.Item, phase itemPhase, width, idWidth int, blockers func
 	case itemAborted:
 		abortedStyle := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Error)
 		detail := mutedStyle.Render("[" + todo.BackgroundStatusDetail(t) + "]")
-		return renderItemLine(indent, abortedStyle.Render("!"), idTag, subject, detail)
+		return renderItemLine(indent+dropMarker, abortedStyle.Render("!"), idTag, subject, detail)
 
 	case itemFinished:
-		return renderItemLine(indent, tint(trackerCompletedStyle).Render("●"), idTag, tint(lipgloss.NewStyle()).Render(subject), "")
+		return renderItemLine(indent+dropMarker, tint(trackerCompletedStyle).Render("●"), idTag, tint(lipgloss.NewStyle()).Render(subject), "")
 
 	case itemStalled:
 		// Nothing is executing this item, so draw it at rest. Reaching here
 		// means the status outlived its executor within a live session — the
 		// model marked an item in_progress and moved on without closing it.
 		// Animating would claim work that isn't happening.
-		return renderItemLine(indent, mutedStyle.Render("◌"), idTag, activeText(t, maxTextLen), mutedStyle.Render("[stalled]"))
+		return renderItemLine(indent+dropMarker, mutedStyle.Render("◌"), idTag, activeText(t, maxTextLen), mutedStyle.Render("[stalled]"))
 
 	case itemRunning:
 		// Pulse on the shared frame tick (a true ~360ms clock; see FrameClock)
@@ -213,7 +241,7 @@ func renderItem(t *todo.Item, phase itemPhase, width, idWidth int, blockers func
 		if elapsed := formatElapsedTime(t.StatusChangedAt); elapsed != "" {
 			detail = mutedStyle.Render(elapsed)
 		}
-		return renderItemLine(indent, activeStyle.Render(activeIcon), idTag, tint(lipgloss.NewStyle()).Render(activeText(t, maxTextLen)), detail)
+		return renderItemLine(indent+dropMarker, activeStyle.Render(activeIcon), idTag, tint(lipgloss.NewStyle()).Render(activeText(t, maxTextLen)), detail)
 
 	default:
 		detail := ""
@@ -227,7 +255,7 @@ func renderItem(t *todo.Item, phase itemPhase, width, idWidth int, blockers func
 				detail = blockedStyle.Render("← " + strings.Join(blockerRefs, ", "))
 			}
 		}
-		return renderItemLine(indent, tint(trackerPendingStyle).Render("○"), idTag, tint(lipgloss.NewStyle()).Render(subject), detail)
+		return renderItemLine(indent+dropMarker, tint(trackerPendingStyle).Render("○"), idTag, tint(lipgloss.NewStyle()).Render(subject), detail)
 	}
 }
 
@@ -251,6 +279,30 @@ func renderItemLine(indent, icon, id, subject, detail string) string {
 		line += "  " + detail
 	}
 	return line + "\n"
+}
+
+// renderDropdown renders the subagent detail block under an expanded row. It
+// shows up to MaxSubagentLines activity lines, each indented under the parent
+// row so the eye reads them as one nested group.
+func renderDropdown(lines []string, width, idWidth int) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	capped := lines
+	if len(capped) > MaxSubagentLines {
+		capped = capped[:MaxSubagentLines]
+	}
+	var sb strings.Builder
+	detailStyle := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted)
+	indent := strings.Repeat(" ", idWidth+6)
+	for _, ln := range capped {
+		sb.WriteString("    " + indent + detailStyle.Render(kit.TruncateText(ln, max(width-len(indent)-4, 8))) + "\n")
+	}
+	if len(lines) > MaxSubagentLines {
+		sb.WriteString("    " + indent + detailStyle.Render("…"))
+		sb.WriteString("\n")
+	}
+	return sb.String()
 }
 
 func itemIDWidth(items []*todo.Item) int {

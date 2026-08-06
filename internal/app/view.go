@@ -2,6 +2,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -13,6 +14,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/llm"
 	"github.com/boytegar/packboy-builder/internal/setting"
 	"github.com/boytegar/packboy-builder/internal/subagent"
+	"github.com/boytegar/packboy-builder/internal/task"
 	"github.com/boytegar/packboy-builder/internal/todo"
 )
 
@@ -343,7 +345,71 @@ func (m *model) renderTrackerList() string {
 		Executing:    m.executingTrackerItem,
 		Blink:        m.conv.Spinner.Frame(),
 		AgentColors:  m.agentColors(),
+		Expanded:     m.expandedTrackerItem,
+		DetailLines:  m.trackerDetailLines,
+		FocusedIdx:   m.trackerFocusIdx,
 	})
+}
+
+// trackerDetailLines reports the subagent detail lines shown under an expanded
+// tracker row. It joins the item's tracked background task against the live
+// task manager and summarises the agent/lifecycle in a few lines for the
+// dropdown; plan items (no background task) report nothing.
+func (m *model) trackerDetailLines(itemID string) []string {
+	item, ok := m.services.Tracker.Get(itemID)
+	if !ok || item == nil {
+		return nil
+	}
+	taskID := todo.BackgroundTaskID(item)
+	if taskID == "" {
+		return nil
+	}
+	bg, ok := m.services.Task.Get(taskID)
+	if !ok {
+		return nil
+	}
+	info := bg.GetStatus()
+
+	var lines []string
+	if info.AgentName != "" {
+		lines = append(lines, "agent: "+info.AgentName)
+	}
+	lines = append(lines, "status: "+string(info.Status))
+	if info.Type != "" {
+		lines = append(lines, "type: "+string(info.Type))
+	}
+	if info.StepCount > 0 {
+		lines = append(lines, fmt.Sprintf("steps: %d", info.StepCount))
+	}
+	if info.TokenUsage > 0 {
+		lines = append(lines, fmt.Sprintf("tokens: %d", info.TokenUsage))
+	}
+	out := strings.TrimSpace(info.Output)
+	if out != "" {
+		lines = append(lines, "output: "+out)
+	}
+	if clipped := strings.TrimSpace(clipToMaxLines(info, conv.MaxSubagentLines-len(lines))); clipped != "" {
+		lines = append(lines, clipped)
+	}
+	return lines
+}
+
+// clipToMaxLines guards a detail block from outgrowing the dropdown budget even
+// before RenderTrackerList re-caps it — long bash output could otherwise push a
+// single row's detail past the 15-line ceiling.
+func clipToMaxLines(info task.TaskInfo, budget int) string {
+	if budget <= 0 {
+		return ""
+	}
+	out := strings.TrimSpace(info.Output)
+	if out == "" {
+		return ""
+	}
+	lines := strings.Split(out, "\n")
+	if len(lines) > budget {
+		lines = lines[:budget]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m model) renderModeStatus() string {

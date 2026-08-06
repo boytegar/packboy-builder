@@ -16,6 +16,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/core"
 	"github.com/boytegar/packboy-builder/internal/llm"
 	"github.com/boytegar/packboy-builder/internal/log"
+	"github.com/boytegar/packboy-builder/internal/reminder"
 )
 
 // visionAnalysisMsg carries the vision model's image analysis back to the UI
@@ -235,9 +236,20 @@ func (m *model) handleVisionAnalysis(msg visionAnalysisMsg) tea.Cmd {
 		m.conv.AddNotice("Vision analysis failed: " + msg.Err.Error())
 		return tea.Batch(m.CommitMessages()...)
 	}
-	if strings.TrimSpace(msg.Analysis) != "" {
-		m.services.Reminder.Enqueue("Image analysis (from the vision model):\n" + msg.Analysis)
+	analysis := strings.TrimSpace(msg.Analysis)
+	if analysis == "" {
+		// Empty analysis = vision failure, not a successful no-op. Surface it
+		// and restore the input so the user can retry/remove the image rather
+		// than silently sending a bare prompt with zero image info.
+		m.userInput.ReturnToTextarea(pending.Content, pending.Images)
+		m.conv.AddNotice("Image analysis came back empty — the vision model returned no description. Not sending the image(s).")
+		return tea.Batch(m.CommitMessages()...)
 	}
+	// Merge the analysis permanently into the user message content so it
+	// survives an agent rebuild / /resume (the transient reminder queue is
+	// drained on the wire copy only; conv is the rebuild seed).
+	pending.Content = reminder.AttachToContent(pending.Content,
+		[]string{"Image analysis (from the vision model):\n" + analysis})
 	// Strip images — the main model gets the text analysis instead of pixels.
 	pending.Images = nil
 	m.conv.Append(*pending)
@@ -255,9 +267,11 @@ func (m *model) drainInputQueueWhileIdle() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	if m.imagesBlockedForModel(item.Images) {
+	if len(item.Images) > 0 && !m.visionModelConfigured() && m.imagesBlockedForModel(item.Images) {
 		// Hand the message back instead of dropping it — the notice tells
-		// the user to remove the image or switch models.
+		// the user to remove the image, switch models, or configure a
+		// VisionModel. When a VisionModel is set, dispatchSubmission's vision
+		// pre-pass handles the images instead of blocking.
 		m.userInput.ReturnToTextarea(item.Content, item.Images)
 		return tea.Batch(m.CommitMessages()...)
 	}

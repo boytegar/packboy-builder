@@ -66,6 +66,15 @@ type model struct {
 	// model_scrollback.go (takeWelcomeBanner).
 	welcomePending bool
 
+	// expandedTrackerItem is the tracker item ID whose detail dropdown is open
+	// (▾), or "" when all rows are collapsed. Toggled by clicking an expandable
+	// row (or Enter while one is focused). UI-goroutine-owned.
+	expandedTrackerItem string
+	// trackerFocusIdx is the index of the tracker row highlighted for dropdown
+	// keyboard navigation (alt+w cycles, alt+e toggles). -1 when nothing is
+	// focused. UI-goroutine-owned.
+	trackerFocusIdx int
+
 	// reviewerApprovals / reviewerEscalations count auto-review outcomes this
 	// session for the status bar: gray-zone tool calls the judge auto-approved
 	// vs. handed back to the user. Pointers so value-receiver copies of the

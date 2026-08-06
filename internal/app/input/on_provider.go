@@ -303,6 +303,12 @@ func UpdateProvider(deps OverlayDeps, state *ProviderState, msg tea.Msg) (tea.Cm
 		handleSubagentModelSaved(deps, msg)
 		return tea.Batch(deps.CommitMessages()...), true
 	case visionModelSavedMsg:
+		// Reload the live settings handle (like handleSubagentModelSaved) so the
+		// vision pre-pass gate reads the fresh snapshot for this session instead
+		// of a stale one captured at startup.
+		if deps.ReloadSettings != nil {
+			_ = deps.ReloadSettings()
+		}
 		deps.Conv.Append(core.ChatMessage{Role: core.RoleNotice, Content: visionSavedNotice(msg)})
 		return tea.Batch(deps.CommitMessages()...), true
 	case providerModelsLoadedMsg:
