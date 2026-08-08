@@ -81,45 +81,34 @@ commands change. Do not duplicate them here.
 - Active plans live in `notes/active/`; completed plans move to
   `notes/completed/`.
 
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
 
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
 
-### When to use graph tools FIRST
+<!-- gortex:communities:start -->
+<!-- gortex:skills:start -->
+## Community Skills
 
-- **Exploring code**: `semantic_search_nodes_tool` or `query_graph_tool` instead of Grep
-- **Understanding impact**: `get_impact_radius_tool` instead of manually tracing imports
-- **Code review**: `detect_changes_tool` + `get_review_context_tool` instead of reading entire files
-- **Finding relationships**: `query_graph_tool` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview_tool` + `list_communities_tool`
+| Area | Description | Skill |
+|------|-------------|-------|
+| Plugin 30 Dirs | 3033 symbols | `/gortex-plugin-30-dirs` |
+| App Input 49 Dirs | 1871 symbols | `/gortex-app-input-49-dirs` |
+| Mcp 34 Dirs | 1620 symbols | `/gortex-mcp-34-dirs` |
+| Setting 44 Dirs | 1582 symbols | `/gortex-setting-44-dirs` |
+| App 22 Dirs | 1488 symbols | `/gortex-app-22-dirs` |
+| Hook 11 Dirs | 1129 symbols | `/gortex-hook-11-dirs` |
+| App Conv 21 Dirs | 953 symbols | `/gortex-app-conv-21-dirs` |
+| Setting 21 Dirs | 810 symbols | `/gortex-setting-21-dirs` |
+| App Input 11 Dirs | 763 symbols | `/gortex-app-input-11-dirs` |
+| Tool 20 Dirs | 751 symbols | `/gortex-tool-20-dirs` |
+| Search 24 Dirs | 698 symbols | `/gortex-search-24-dirs` |
+| App Conv 6 Dirs Render | 668 symbols | `/gortex-app-conv-6-dirs-render` |
+| Session 22 Dirs | 649 symbols | `/gortex-session-22-dirs` |
+| Lsp 20 Dirs | 554 symbols | `/gortex-lsp-20-dirs` |
+| Core 8 Dirs Thinkact | 518 symbols | `/gortex-core-8-dirs-thinkact` |
+| App Input 19 Dirs | 459 symbols | `/gortex-app-input-19-dirs` |
+| Llm 5 Dirs | 439 symbols | `/gortex-llm-5-dirs` |
+| Todo 6 Dirs | 423 symbols | `/gortex-todo-6-dirs` |
+| App Input 16 Dirs | 410 symbols | `/gortex-app-input-16-dirs` |
+| Session Transcript 1 Dirs Testeventsshape | 340 symbols | `/gortex-session-transcript-1-dirs-testeventsshape` |
+<!-- gortex:skills:end -->
 
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
-
-### MCP tools sync before the agent opens
-
-The harness never opens the agent alongside an MCP connect. When any MCP server finishes connecting, it **rebuilds the agent** so the model's toolset always includes that server's tools (`mcpToolsSignature` drift check). Tool schema sync completes first; the agent is built after — so third-party MCP tools (e.g. code-review-graph) are present and callable from the first turn, and the `researcher` subagent uses them (`query_graph_tool`, `semantic_search_nodes_tool`) instead of scanning files from zero.
-
-### Key Tools
-
-| Tool | Use when |
-| ------ | ---------- |
-| `detect_changes_tool` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context_tool` | Need source snippets for review — token-efficient |
-| `get_impact_radius_tool` | Understanding blast radius of a change |
-| `get_affected_flows_tool` | Finding which execution paths are impacted |
-| `query_graph_tool` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes_tool` | Finding functions/classes by name or keyword |
-| `get_architecture_overview_tool` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
-
-### Workflow
-
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes_tool` for code review.
-3. Use `get_affected_flows_tool` to understand impact.
-4. Use `query_graph_tool` pattern="tests_for" to check coverage.
+<!-- gortex:communities:end -->

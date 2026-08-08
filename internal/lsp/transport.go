@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -107,6 +108,8 @@ type Client struct {
 	notify       NotificationHandler
 	alive        bool
 	exitCh       chan struct{}
+	exitOnce     sync.Once
+	readDone     chan struct{}
 	openVersions map[string]int
 	capabilities ServerCapabilities
 	positionEnc  string
@@ -123,9 +126,10 @@ type NotificationHandler func(method string, params json.RawMessage)
 
 func NewClient(config ServerConfig) *Client {
 	return &Client{
-		config:  config,
-		pending: make(map[int]*pendingRequest),
-		exitCh:  make(chan struct{}),
+		config:   config,
+		pending:  make(map[int]*pendingRequest),
+		exitCh:   make(chan struct{}),
+		readDone: make(chan struct{}),
 	}
 }
 
@@ -139,7 +143,7 @@ func (c *Client) Start(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
-	cmd := exec.CommandContext(ctx, c.config.Command, c.config.Args...)
+	cmd := exec.Command(c.config.Command, c.config.Args...)
 	cmd.Env = mergeEnv(nil)
 	proc.SetProcessGroup(cmd)
 
@@ -228,10 +232,7 @@ func (c *Client) Send(ctx context.Context, method string, params any) (json.RawM
 
 func (c *Client) cancelPending(id int) {
 	c.mu.Lock()
-	if pr, ok := c.pending[id]; ok {
-		close(pr.ch)
-		delete(c.pending, id)
-	}
+	delete(c.pending, id)
 	c.mu.Unlock()
 }
 
@@ -303,13 +304,24 @@ func (c *Client) Close() {
 
 	if stdin != nil {
 		// Best-effort: ask the server to shut down and exit.
+		// Bypass the alive check (we just set it false) by calling
+		// writeMessage directly.
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_, _ = c.Send(shutdownCtx, "shutdown", nil)
+		shutdownMsg := lspMessage{JSONRPC: "2.0", ID: float64Ptr(nextRequestID()), Method: "shutdown"}
+		_ = c.writeMessage(shutdownCtx, shutdownMsg)
 		cancel()
 		exitCtx, cancelExit := context.WithTimeout(context.Background(), 2*time.Second)
-		_ = c.Notify(exitCtx, "exit", nil)
+		exitMsg := lspMessage{JSONRPC: "2.0", Method: "exit"}
+		_ = c.writeMessage(exitCtx, exitMsg)
 		cancelExit()
 		_ = stdin.Close()
+	}
+
+	// Wait for the reader goroutine to finish before calling cmd.Wait(),
+	// otherwise Wait can race the pipe reads.
+	select {
+	case <-c.readDone:
+	case <-time.After(2 * time.Second):
 	}
 
 	wait := make(chan struct{})
@@ -337,7 +349,7 @@ func (c *Client) Close() {
 			}
 		}
 	}
-	close(c.exitCh)
+	c.exitOnce.Do(func() { close(c.exitCh) })
 }
 
 func (c *Client) writeMessage(ctx context.Context, msg lspMessage) error {
@@ -358,6 +370,7 @@ func (c *Client) writeMessage(ctx context.Context, msg lspMessage) error {
 }
 
 func (c *Client) readMessages() {
+	defer close(c.readDone)
 	for {
 		body, err := c.reader.ReadMessage()
 		if err != nil {
@@ -366,16 +379,8 @@ func (c *Client) readMessages() {
 			}
 			c.mu.Lock()
 			c.alive = false
-			closed := false
-			select {
-			case <-c.exitCh:
-				closed = true
-			default:
-			}
 			c.mu.Unlock()
-			if !closed {
-				close(c.exitCh)
-			}
+			c.exitOnce.Do(func() { close(c.exitCh) })
 			return
 		}
 
@@ -436,11 +441,10 @@ func writeFull(ctx context.Context, w io.Writer, data []byte) error {
 	}
 }
 
-var requestIDAtomic int
+var requestIDAtomic atomic.Int64
 
 func nextRequestID() int {
-	requestIDAtomic++
-	return requestIDAtomic
+	return int(requestIDAtomic.Add(1))
 }
 
 func float64Ptr(n int) *float64 {
