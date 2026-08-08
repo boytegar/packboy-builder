@@ -331,8 +331,13 @@ Review instructions.
 
 	// Match by description keyword "review" for the reviewer skill.
 	matches = registry.MatchForPrompt("can you review this pull request?")
+	if len(matches) != 0 {
+		t.Fatalf("description-only match: got %d matches, want 0", len(matches))
+	}
+
+	matches = registry.MatchForPrompt("please ask the reviewer to review this")
 	if len(matches) != 1 {
-		t.Fatalf("description match: got %d matches, want 1", len(matches))
+		t.Fatalf("exact name match: got %d matches, want 1", len(matches))
 	}
 
 	// No match for a prompt mentioning neither skill's keywords.

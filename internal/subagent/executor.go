@@ -394,11 +394,14 @@ func (e *Executor) prepareRunConfig(ctx context.Context, req tool.AgentExecReque
 	permMode := e.requestPermissionMode(config, req)
 
 	maxSteps := defaultMaxSteps
-	if config.MaxSteps > maxSteps {
+	if config.MaxSteps > 0 {
 		maxSteps = config.MaxSteps
 	}
-	if req.MaxSteps > maxSteps {
+	if req.MaxSteps > 0 {
 		maxSteps = req.MaxSteps
+	}
+	if maxSteps < minMaxSteps {
+		maxSteps = minMaxSteps
 	}
 
 	provider, modelID, err := e.resolveModel(ctx, req.Model, config.Model, config.Name, config.AllowWrite || e.isWriteEnabled(config.Name))

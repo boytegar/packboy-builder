@@ -423,13 +423,18 @@ func (r *Registry) PromptSection() string {
 // (first few words, lowercased) must overlap. This avoids false-positive
 // injections for generic words.
 func (r *Registry) MatchForPrompt(text string) []string {
+	return r.MatchForPromptWithTracker(text, nil)
+}
+
+// MatchForPromptWithTracker matches active skills by exact name/namespace,
+// skipping skills already loaded by the supplied tracker.
+func (r *Registry) MatchForPromptWithTracker(text string, tr *Tracker) []string {
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Build a lowercase token set from the user text for set membership.
 	tokens := tokenizePrompt(text)
 	if len(tokens) == 0 {
 		return nil
@@ -437,7 +442,7 @@ func (r *Registry) MatchForPrompt(text string) []string {
 
 	var matches []string
 	for _, sk := range r.skills {
-		if !sk.IsActive() {
+		if !sk.IsActive() || (tr != nil && tr.IsLoaded(sk.FullName())) {
 			continue
 		}
 		if skillMatchesText(sk, tokens) {
@@ -449,9 +454,6 @@ func (r *Registry) MatchForPrompt(text string) []string {
 	return matches
 }
 
-// tokenizePrompt splits text into a lowercase set of word tokens for
-// set-membership matching. Tokens shorter than 3 chars are dropped to reduce
-// noise ("a", "to", "do").
 func tokenizePrompt(text string) map[string]bool {
 	text = strings.ToLower(text)
 	fields := strings.FieldsFunc(text, func(r rune) bool {
@@ -471,8 +473,11 @@ func tokenizePrompt(text string) map[string]bool {
 // checked as whole-word matches; the description contributes its longest
 // content words (>=4 chars) so a skill like "commit: create a git commit"
 // matches when the user says "commit" or "git".
+// skillMatchesText returns true only for high-confidence exact matches:
+// the prompt must contain the skill's name or namespace as a complete
+// token (case-insensitive). Description keyword matching is intentionally
+// excluded to avoid false-positive injections.
 func skillMatchesText(sk *Skill, tokens map[string]bool) bool {
-	// Name (and namespace) as whole words.
 	for _, part := range strings.Fields(strings.ToLower(sk.Name)) {
 		if len(part) >= 3 && tokens[part] {
 			return true
@@ -483,15 +488,6 @@ func skillMatchesText(sk *Skill, tokens map[string]bool) bool {
 			if len(part) >= 3 && tokens[part] {
 				return true
 			}
-		}
-	}
-	// Description keywords: words >=5 chars. This keeps the match specific
-	// (e.g. "commit", "review", "deploy") rather than matching "the", "and",
-	// or generic 4-char words like "code" or "this".
-	for _, w := range strings.Fields(strings.ToLower(sk.Description)) {
-		w = strings.Trim(w, ".,;:()[]")
-		if len(w) >= 5 && tokens[w] {
-			return true
 		}
 	}
 	return false

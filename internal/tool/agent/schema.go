@@ -40,7 +40,7 @@ func agentSchema(agentDirectory string) core.ToolSchema {
 		sb.WriteString(agentDirectory)
 		sb.WriteString("\n\n")
 	}
-	sb.WriteString("Brief the agent with all context it needs: the goal, relevant paths, constraints, and what is already known. Use explore for read-only investigation and edit for file changes.\n\n")
+	sb.WriteString("Brief the agent with focused context: state the objective/question, relevant paths or symbols, known context, constraints, stop condition, and concise output format (include file:line refs). Do not ask it to broadly search the codebase. Use explore for read-only investigation and edit for file changes.\n\n")
 	sb.WriteString("Launch independent agents concurrently. Use background mode only for work that does not block your next step. Verify the result before reporting it.")
 
 	return core.ToolSchema{
@@ -55,7 +55,7 @@ var agentToolParameters = map[string]any{
 	"properties": map[string]any{
 		"prompt": map[string]any{
 			"type":        "string",
-			"description": "The task for the agent to perform",
+			"description": "Focused task brief: what to find/answer; scope (paths, packages, or symbols); known context; constraints; stop condition; expected concise output with file:line references.",
 		},
 		"description": map[string]any{
 			"type":        "string",
@@ -71,7 +71,7 @@ var agentToolParameters = map[string]any{
 		},
 		"max_steps": map[string]any{
 			"type":        "number",
-			"description": "Maximum number of LLM inference steps. Defaults to 500; lower values are raised to 500.",
+			"description": "Maximum number of LLM inference steps. Defaults to 500; values below the safe minimum are clamped to 10.",
 		},
 		"mode": map[string]any{
 			"type":        "string",

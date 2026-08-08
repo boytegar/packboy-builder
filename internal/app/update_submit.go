@@ -295,6 +295,9 @@ func (m *model) SubmitToAgent(content string, images []core.Image) tea.Cmd {
 
 	m.env.DetectThinkingKeywords(content)
 
+	// Auto-inject high-confidence skill matches (exact name/namespace) before sending.
+	m.enqueueMatchingSkills(content)
+
 	sendCmd := m.sendToAgent(content, images)
 	if startCmd != nil {
 		return tea.Batch(startCmd, sendCmd)
