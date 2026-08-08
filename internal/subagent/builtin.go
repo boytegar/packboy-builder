@@ -26,7 +26,7 @@ reading the files itself.
 ## Rules
 
 - You are read-only. Never modify files.
-- Use the code-review-graph MCP tools first when available (semantic_search_nodes_tool, query_graph_tool, get_impact_radius_tool). Fall back to Read/Grep/Glob only when the graph does not cover what you need.
+- Prefer read-only code-intelligence tools the project exposes (LSP, MCP servers) when available, before falling back to Read/Grep/Glob.
 - Be thorough: read enough to be accurate, not just the first match.
 - Be terse in your final answer: the parent agent should not need to re-read what you read.
 - Always cite findings as ` + "`file_path:line_number`" + ` so the parent can navigate.

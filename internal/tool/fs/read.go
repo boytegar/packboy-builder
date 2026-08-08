@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/boytegar/packboy-builder/internal/lsp"
 	"github.com/boytegar/packboy-builder/internal/tool"
 	"github.com/boytegar/packboy-builder/internal/tool/toolresult"
 )
@@ -204,6 +205,7 @@ func (t *ReadTool) Execute(ctx context.Context, params map[string]any, cwd strin
 		},
 	}
 
+	lsp.AppendDiagnostics(&result, filePath)
 	return result
 }
 

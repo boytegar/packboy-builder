@@ -47,6 +47,7 @@ type adaptConfig struct {
 	messagesGetter  MessagesGetter
 	activityFn      func(toolCallID string, msg string)
 	promptResponder BashPromptResponderProvider
+	skillTracker    SkillLoadTracker
 }
 
 // WithAskUser sets the handler the AskUserQuestion tool uses to ask the user.
@@ -69,6 +70,10 @@ func WithToolActivity(fn func(toolCallID string, msg string)) AdaptOption {
 // safely handle interactive prompts during execution.
 func WithBashPromptResponderProvider(fn BashPromptResponderProvider) AdaptOption {
 	return func(c *adaptConfig) { c.promptResponder = fn }
+}
+
+func WithSkillLoadTrackerProvider(tracker SkillLoadTracker) AdaptOption {
+	return func(c *adaptConfig) { c.skillTracker = tracker }
 }
 
 // AdaptTool wraps a legacy Tool as a core.Tool with a dynamic CWD resolver.
@@ -94,7 +99,7 @@ func AdaptToolRegistry(schemas []core.ToolSchema, cwd func() string, opts ...Ada
 	var adapted []core.Tool
 	for name, schema := range schemaByName {
 		if t, ok := Get(name); ok {
-			adapted = append(adapted, &toolAdapter{inner: t, schema: schema, cwd: cwd, askFn: cfg.askFn, messagesGetter: cfg.messagesGetter, activityFn: cfg.activityFn, promptResponder: cfg.promptResponder})
+			adapted = append(adapted, &toolAdapter{inner: t, schema: schema, cwd: cwd, askFn: cfg.askFn, messagesGetter: cfg.messagesGetter, activityFn: cfg.activityFn, promptResponder: cfg.promptResponder, skillTracker: cfg.skillTracker})
 		}
 	}
 	return core.NewTools(adapted...)
@@ -109,6 +114,7 @@ type toolAdapter struct {
 	messagesGetter  MessagesGetter
 	activityFn      func(toolCallID string, msg string)
 	promptResponder BashPromptResponderProvider
+	skillTracker    SkillLoadTracker
 }
 
 func (a *toolAdapter) Name() string            { return a.inner.Name() }
@@ -125,6 +131,9 @@ func (a *toolAdapter) Execute(ctx context.Context, input map[string]any) (string
 	}
 	if a.promptResponder != nil {
 		ctx = ContextWithBashPromptResponderProvider(ctx, a.promptResponder)
+	}
+	if a.skillTracker != nil {
+		ctx = WithSkillLoadTracker(ctx, a.skillTracker)
 	}
 	// A running command (Bash) reports its growing output through the same
 	// activity callback agent tools use; the receiver shows it as the row's

@@ -331,8 +331,13 @@ Review instructions.
 
 	// Match by description keyword "review" for the reviewer skill.
 	matches = registry.MatchForPrompt("can you review this pull request?")
+	if len(matches) != 0 {
+		t.Fatalf("description-only match: got %d matches, want 0", len(matches))
+	}
+
+	matches = registry.MatchForPrompt("please ask the reviewer to review this")
 	if len(matches) != 1 {
-		t.Fatalf("description match: got %d matches, want 1", len(matches))
+		t.Fatalf("exact name match: got %d matches, want 1", len(matches))
 	}
 
 	// No match for a prompt mentioning neither skill's keywords.
@@ -586,5 +591,35 @@ func TestResolveSkillDirs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSkillsSectionIsEscapedCatalog(t *testing.T) {
+	registry := NewRegistryForTest(map[string]*Skill{
+		"alpha": {
+			Name:         "alpha",
+			Description:  `Use <fast> & "safe"`,
+			ArgumentHint: `<file>`,
+			FilePath:     `/tmp/a&b/SKILL.md`,
+			State:        StateActive,
+		},
+		"hidden": {Name: "hidden", Description: "no", State: StateEnable},
+	}, &Store{states: map[string]SkillState{}}, &Store{states: map[string]SkillState{}})
+
+	section := registry.GetSkillsSection()
+	for _, want := range []string{
+		"<available_skills>",
+		"<name>alpha</name>",
+		"Use &lt;fast&gt; &amp; &quot;safe&quot;",
+		"<argument_hint>&lt;file&gt;</argument_hint>",
+		"/tmp/a&amp;b/SKILL.md",
+		"<skills_usage>",
+	} {
+		if !contains(section, want) {
+			t.Errorf("catalog missing %q:\n%s", want, section)
+		}
+	}
+	if contains(section, "hidden") {
+		t.Fatalf("enable-only skill leaked into catalog: %s", section)
 	}
 }

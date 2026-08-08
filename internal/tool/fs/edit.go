@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/boytegar/packboy-builder/internal/lsp"
 	"github.com/boytegar/packboy-builder/internal/tool"
 	"github.com/boytegar/packboy-builder/internal/tool/perm"
 	"github.com/boytegar/packboy-builder/internal/tool/toolresult"
@@ -118,7 +119,7 @@ func (t *EditTool) ExecuteApproved(ctx context.Context, params map[string]any, c
 	} else {
 		output += "; file state is current — no need to re-read"
 	}
-	return toolresult.ToolResult{
+	result := toolresult.ToolResult{
 		Success: true,
 		Output:  output,
 		Details: toolresult.FileChangeDetails{
@@ -140,6 +141,8 @@ func (t *EditTool) ExecuteApproved(ctx context.Context, params map[string]any, c
 		},
 		Metadata: toolresult.ResultMetadata{Title: t.Name(), Icon: t.Icon(), Subtitle: filePath, Duration: time.Since(start)},
 	}
+	lsp.AppendDiagnostics(&result, filePath)
+	return result
 }
 
 func parseEditRequest(params map[string]any) (string, editReplacement, error) {
