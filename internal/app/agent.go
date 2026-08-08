@@ -740,6 +740,7 @@ func (m *model) ReconfigureAgentTool() {
 	}
 	executor.SetProjectInstructions(m.env.CachedProjectInstructions)
 	executor.SetSkillsDirectory(m.services.Skill.PromptSection())
+	// Give subagents the same high-confidence exact name/namespace matcher.
 	executor.SetSkillMatcher(m.services.Skill)
 	executor.SetMCPDependencies(m.services.MCP, m.services.MCP)
 	executor.SetDisabledTools(m.services.Setting.DisabledTools())

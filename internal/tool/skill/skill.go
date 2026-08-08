@@ -177,6 +177,10 @@ func (t *SkillTool) execute(ctx context.Context, params map[string]any, cwd stri
 	sb.WriteString(instructions)
 	sb.WriteString("\n</skill-invocation>")
 
+	if tracker := tool.SkillLoadTrackerFromContext(ctx); tracker != nil {
+		tracker.MarkLoaded(sk.FullName())
+	}
+
 	duration := time.Since(start)
 
 	// Count resources for display

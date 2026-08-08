@@ -20,14 +20,9 @@ the empty-prompt guardrail in Phase 1.
 Before assessing confidence, ground yourself in the actual codebase. Use the
 cheapest path that answers the question:
 
-- If the project has the code-review-graph MCP tools, call them FIRST:
-  `get_minimal_context_tool` (entry point), then `semantic_search_nodes_tool`
-  / `query_graph_tool` (callers, callees, imports, tests) / `get_impact_radius_tool`
-  as needed. The graph is faster and gives structural context file scanning
-  cannot.
-- Otherwise (or for detail the graph lacks), read the specific files. Spawn a
-  `researcher` subagent (mode=explore, read-only) when the task touches more
-  than 1-2 files or you need to trace a call path — keep your own context lean.
+- Read the specific files you already know are relevant. Spawn a `researcher`
+  subagent (mode=explore, read-only) when the task touches more than 1-2 files
+  or you need to trace a call path — keep your own context lean.
 - `rg`/`grep` only as a last resort for exact string/identifier location.
 
 Record what you found as a knowledge summary with `file:line` references.

@@ -72,7 +72,7 @@ func TestPrepareRunConfigRespectsOverrides(t *testing.T) {
 	}
 }
 
-func TestPrepareRunConfigDoesNotLowerMinimumMaxSteps(t *testing.T) {
+func TestPrepareRunConfigHonorsLowerMaxSteps(t *testing.T) {
 	executor := &Executor{parentModelID: "parent-model"}
 
 	rc, err := executor.prepareRunConfig(context.Background(), tool.AgentExecRequest{
@@ -82,8 +82,8 @@ func TestPrepareRunConfigDoesNotLowerMinimumMaxSteps(t *testing.T) {
 		t.Fatalf("prepareRunConfig() error: %v", err)
 	}
 
-	if rc.maxSteps != defaultMaxSteps {
-		t.Fatalf("expected low max steps override to be raised to %d, got %d", defaultMaxSteps, rc.maxSteps)
+	if rc.maxSteps != 20 {
+		t.Fatalf("expected low max steps override to be honored, got %d", rc.maxSteps)
 	}
 }
 

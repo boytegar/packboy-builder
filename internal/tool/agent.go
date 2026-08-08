@@ -128,3 +128,19 @@ type AgentConfigInfo struct {
 	// AllowWrite mirrors AgentConfig.AllowWrite for display/UI.
 	AllowWrite bool
 }
+
+type skillLoadTrackerKey struct{}
+
+// SkillLoadTracker records successful Skill tool loads for one agent session.
+type SkillLoadTracker interface {
+	MarkLoaded(name string)
+}
+
+func WithSkillLoadTracker(ctx context.Context, tracker SkillLoadTracker) context.Context {
+	return context.WithValue(ctx, skillLoadTrackerKey{}, tracker)
+}
+
+func SkillLoadTrackerFromContext(ctx context.Context) SkillLoadTracker {
+	tracker, _ := ctx.Value(skillLoadTrackerKey{}).(SkillLoadTracker)
+	return tracker
+}

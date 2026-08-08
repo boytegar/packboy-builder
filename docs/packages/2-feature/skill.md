@@ -6,7 +6,7 @@ layer: feature
 # skill
 
 Loads markdown-defined skills from user / project / plugin scopes, tracks
-their enable state, and renders the active-skills directory that the
+their enable state, and renders a progressive active-skills catalog that the
 harness attaches to user messages via the `skills-directory` reminder
 (see [`concepts/harness-channels.md`](../../concepts/harness-channels.md)).
 
@@ -24,8 +24,9 @@ hidden (`disabled`). This package:
    directories listed in `settings.json` `"skillDirs"` (see
    Configuration).
 2. Persists per-skill state in user / project state stores.
-3. Renders the active-skills block consumed by the `skills-directory`
-   reminder provider in `internal/app`.
+3. Renders an XML-escaped active-skills catalog consumed by the `skills-directory`
+   reminder provider in `internal/app`. The catalog contains metadata only; the
+   permission-gated `Skill` tool loads the instruction body explicitly.
 
 For the broader extension model see
 [`concepts/extension-model.md`](../../concepts/extension-model.md). A
@@ -143,6 +144,7 @@ internal/skill/skill_test.go            — loader, state cycling,
                                             scope priority, prompt rendering.
 internal/skill/lazy_loading_test.go     — verifies content stays on disk
                                             until GetInstructions().
+internal/skill/tracker_test.go          — session load tracker semantics.
 ```
 
 ## See Also

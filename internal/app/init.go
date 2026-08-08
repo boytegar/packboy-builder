@@ -17,6 +17,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/hook"
 	"github.com/boytegar/packboy-builder/internal/llm"
 	"github.com/boytegar/packboy-builder/internal/log"
+	"github.com/boytegar/packboy-builder/internal/lsp"
 	"github.com/boytegar/packboy-builder/internal/mcp"
 	"github.com/boytegar/packboy-builder/internal/persona"
 	"github.com/boytegar/packboy-builder/internal/plugin"
@@ -99,6 +100,7 @@ func initExtensions(cwd string) {
 	if err := mcp.Initialize(mcp.Options{CWD: cwd, PluginServers: pluginMCPServers}); err != nil {
 		log.Logger().Warn("Failed to initialize mcp", zap.Error(err))
 	}
+	lsp.Initialize(lsp.ServiceOptions{CWD: cwd, Servers: allLSPServers(cwd)})
 }
 
 // discoverPlugins scans the working directory for plugins. Run on a cwd change
@@ -143,6 +145,9 @@ func (m *model) reloadProjectServices(cwd string) {
 	}
 	m.services.MCP = mcp.DefaultRegistry()
 
+	lsp.Initialize(lsp.ServiceOptions{CWD: cwd, Servers: allLSPServers(cwd)})
+	m.services.LSP = lsp.Default()
+
 	persona.Initialize(cwd)
 	m.services.Persona = persona.Default()
 }
@@ -183,6 +188,32 @@ func pluginSkillPaths() []skill.PluginSkillPath {
 		}
 	}
 	return paths
+}
+
+func allLSPServers(cwd string) map[string]lsp.ServerConfig {
+	// File config: ~/.pcb/lsp.json < ./.pcb/lsp.json < ./.pcb/lsp.local.json
+	loader := lsp.NewConfigLoader(cwd)
+	fileServers, _ := loader.LoadAll()
+
+	// Plugin-contributed servers (override file config for same name).
+	raw := plugin.GetPluginLSPServers()
+	servers := make(map[string]lsp.ServerConfig, len(fileServers)+len(raw))
+
+	// File servers first (lower priority).
+	for name, cfg := range fileServers {
+		servers[name] = cfg
+	}
+
+	// Plugin servers override.
+	for name, cfg := range raw {
+		servers[name] = lsp.ServerConfig{
+			Name:                name,
+			Command:             cfg.Command,
+			Args:                append([]string(nil), cfg.Args...),
+			ExtensionToLanguage: cfg.ExtensionToLanguage,
+		}
+	}
+	return servers
 }
 
 func pluginMCPServers() []mcp.PluginServer {

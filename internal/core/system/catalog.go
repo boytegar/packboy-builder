@@ -234,6 +234,7 @@ func renderSubagentIdentity(b SubagentBrief) string {
 	// Without this, parents re-scan the codebase on the next turn because the
 	// summary described *what was done* instead of *what was found*.
 	sb.WriteString("\nReporting: your final message is the only part of your work the parent agent sees. Return a concise, self-contained summary with the key findings, file:line references for anything the parent needs to edit, and concrete recommendations — not a list of actions you took. The parent should be able to act on the next turn from your summary alone.\n")
+	sb.WriteString("\nSearch discipline: prefer read-only code-intelligence tools the project exposes (LSP, MCP servers) when available, before scanning files. Fall back to Bash (rg, cat, sed -n) when those lack the answer. Stop searching as soon as you have enough evidence to answer the parent question. Do not read entire files when a targeted range suffices.\n")
 	if body := strings.TrimSpace(b.CustomPrompt); body != "" {
 		sb.WriteString("\n")
 		sb.WriteString(body)

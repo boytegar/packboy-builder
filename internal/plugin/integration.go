@@ -249,3 +249,18 @@ func envSafeName(name string) string {
 	s = strings.ReplaceAll(s, ".", "_")
 	return s
 }
+
+// GetPluginLSPServers returns all LSP servers from enabled plugins, keyed by
+// plugin:server name. Used to feed the LSP service.
+func GetPluginLSPServers() map[string]LSPServerConfig {
+	result := make(map[string]LSPServerConfig)
+	for _, p := range defaultRegistry.GetEnabled() {
+		if p.Components.LSP == nil {
+			continue
+		}
+		for name, cfg := range p.Components.LSP {
+			result[p.Name()+":"+name] = cfg
+		}
+	}
+	return result
+}

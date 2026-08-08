@@ -33,7 +33,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 - Add `AllowWrite` subagent mode (frontmatter `allow_write` + `/agent` runtime toggle) that upgrades eligible subagents to accept-edits permission without per-call confirmation.
 - Add `SubagentDefaultModelForWrite` setting and the default-write row in `/models → Subagents` so write-enabled subagents route to a stronger model.
-- Auto-inject matching active skills into delegation prompts and user messages so skills run without an explicit Skill tool call.
+- Auto-inject active skills into main-agent and delegation prompts on high-confidence exact skill-name/namespace matches; description-only matches remain explicit Skill-tool loads.
 - Live-reload agent definitions under `~/.pcb/agents/` when a Write/Edit lands in the agents folder.
 
 ### Changed

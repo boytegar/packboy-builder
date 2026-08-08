@@ -54,6 +54,8 @@ Extension surfaces:
 | `internal/plugin` | `feature` | Plugin compatibility, loading, installation, marketplace, integration. |
 | `internal/mcp` | `feature` | MCP config, client, registry, caller, hook integration. |
 | `internal/mcp/transport` | `feature` | MCP transport implementations. |
+| `internal/lsp` | `feature` | LSP client, lazy manager, diagnostics cache, service. |
+| `internal/tool/lsp` | `tool` | Agent-facing `LSP` tool (diagnostics/definition/references). |
 | `internal/hook` | `feature` | Hook registry, matcher, engine, executors, store. |
 
 Configuration and supporting capabilities:
