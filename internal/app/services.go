@@ -9,6 +9,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/cron"
 	"github.com/boytegar/packboy-builder/internal/hook"
 	"github.com/boytegar/packboy-builder/internal/llm"
+	"github.com/boytegar/packboy-builder/internal/lsp"
 	"github.com/boytegar/packboy-builder/internal/mcp"
 	"github.com/boytegar/packboy-builder/internal/persona"
 	"github.com/boytegar/packboy-builder/internal/plugin"
@@ -39,6 +40,7 @@ type services struct {
 	Tracker  todo.Service
 	Cron     *cron.Scheduler
 	MCP      *mcp.Registry
+	LSP      *lsp.Service
 	Plugin   *plugin.Registry
 	Agent    *agent.Session
 	Persona  *persona.Registry
@@ -106,6 +108,7 @@ func newServices() services {
 		Tracker:   todo.Default(),
 		Cron:      cron.Default(),
 		MCP:       mcp.DefaultRegistry(),
+		LSP:       lsp.Default(),
 		Plugin:    plugin.Default(),
 		Agent:     agent.Default(),
 		Persona:   persona.Default(),

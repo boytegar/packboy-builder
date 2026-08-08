@@ -23,6 +23,7 @@ const (
 	ToolAskUserQuestion = "AskUserQuestion"
 
 	ToolEvolve = "Evolve"
+	ToolLSP    = "LSP"
 )
 
 // IsAgentToolName reports whether the tool name represents an agent-like worker tool.
@@ -61,6 +62,7 @@ type SchemaOptions struct {
 var builtinToolOrder = []string{
 	ToolRead, ToolWebFetch, ToolWebSearch, ToolEdit, ToolWrite, ToolBash, ToolAskUserQuestion,
 	ToolSkill,
+	ToolLSP,
 	ToolAgent, ToolAgentStop, ToolSendMessage,
 	ToolTaskCreate, ToolTaskGet, ToolTaskUpdate,
 	ToolCron,

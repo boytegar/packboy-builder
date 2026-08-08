@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/boytegar/packboy-builder/internal/lsp"
 	"github.com/boytegar/packboy-builder/internal/tool"
 	"github.com/boytegar/packboy-builder/internal/tool/perm"
 	"github.com/boytegar/packboy-builder/internal/tool/toolresult"
@@ -166,7 +167,7 @@ func (t *WriteTool) ExecuteApproved(ctx context.Context, params map[string]any, 
 	changes := perm.GenerateDiff(filePath, oldContent, content)
 	storedDiff, truncatedDiffLines := perm.CapUnifiedDiff(changes.UnifiedDiff, maxStoredDiffLines)
 
-	return toolresult.ToolResult{
+	result := toolresult.ToolResult{
 		Success: true,
 		Output:  action + " " + filePath + " (" + strconv.Itoa(lineCount) + " lines)" + resultNote,
 		Details: toolresult.FileChangeDetails{
@@ -192,6 +193,8 @@ func (t *WriteTool) ExecuteApproved(ctx context.Context, params map[string]any, 
 			Duration:  duration,
 		},
 	}
+	lsp.AppendDiagnostics(&result, filePath)
+	return result
 }
 
 // Execute implements the Tool interface (for permission-unaware execution)

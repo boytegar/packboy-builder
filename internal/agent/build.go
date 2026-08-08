@@ -10,6 +10,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/core/system"
 	"github.com/boytegar/packboy-builder/internal/hook"
 	"github.com/boytegar/packboy-builder/internal/llm"
+	"github.com/boytegar/packboy-builder/internal/skill"
 	"github.com/boytegar/packboy-builder/internal/tool"
 )
 
@@ -100,6 +101,7 @@ func buildAgent(p BuildParams) (core.Agent, *PermissionGate, error) {
 	if p.BashPromptResponder != nil {
 		adaptOpts = append(adaptOpts, tool.WithBashPromptResponderProvider(p.BashPromptResponder))
 	}
+	adaptOpts = append(adaptOpts, tool.WithSkillLoadTrackerProvider(skill.NewTracker()))
 	pg := NewPermissionGate(p.PermissionRules)
 	pg.SetReviewer(p.PermissionReview)
 	var ag core.Agent

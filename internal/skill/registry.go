@@ -294,30 +294,34 @@ func (r *Registry) GetSkillsSection() string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("Use the Skill tool to invoke these capabilities.\n\n")
-	sb.WriteString("IMPORTANT: When a user request or subtask matches one of these skills, you SHOULD invoke the matching skill via the Skill tool BEFORE attempting other approaches — the skill may contain specialized instructions, scripts, or references that produce a better result than ad-hoc work. Match by skill name or description relevance.\n\n")
-
+	sb.WriteString("<available_skills>\n")
 	for _, skill := range active {
-		// Only include name and description (progressive loading)
-		sb.WriteString(fmt.Sprintf("- %s: %s", skill.FullName(), skill.Description))
+		sb.WriteString("  <skill>\n")
+		fmt.Fprintf(&sb, "    <name>%s</name>\n", escapeXML(skill.FullName()))
+		fmt.Fprintf(&sb, "    <description>%s</description>\n", escapeXML(skill.Description))
 		if skill.ArgumentHint != "" {
-			sb.WriteString(fmt.Sprintf(" %s", skill.ArgumentHint))
+			fmt.Fprintf(&sb, "    <argument_hint>%s</argument_hint>\n", escapeXML(skill.ArgumentHint))
 		}
-		if skill.HasResources() {
-			resources := []string{}
-			if len(skill.Scripts) > 0 {
-				resources = append(resources, fmt.Sprintf("%d scripts", len(skill.Scripts)))
-			}
-			if len(skill.References) > 0 {
-				resources = append(resources, fmt.Sprintf("%d refs", len(skill.References)))
-			}
-			sb.WriteString(fmt.Sprintf(" [%s]", strings.Join(resources, ", ")))
+		if skill.FilePath != "" {
+			fmt.Fprintf(&sb, "    <location>%s</location>\n", escapeXML(skill.FilePath))
 		}
-		sb.WriteString("\n")
+		sb.WriteString("  </skill>\n")
 	}
-
-	sb.WriteString("\nInvoke with: Skill(skill=\"name\", args=\"optional args\")")
+	sb.WriteString("</available_skills>\n\n")
+	sb.WriteString("<skills_usage>\n")
+	sb.WriteString("When a request or subtask matches an available skill, invoke Skill with its exact name before other task tools. The catalog is metadata only: Skill loads the full instructions, scripts, and references after permission approval. Do not claim a skill is loaded until the Skill tool succeeds.\n")
+	sb.WriteString("</skills_usage>")
 	return sb.String()
+}
+
+func escapeXML(s string) string {
+	return strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		"\"", "&quot;",
+		"'", "&apos;",
+	).Replace(s)
 }
 
 // GetSkillInvocationPrompt returns the full skill content wrapped in XML for injection.

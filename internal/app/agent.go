@@ -740,7 +740,6 @@ func (m *model) ReconfigureAgentTool() {
 	}
 	executor.SetProjectInstructions(m.env.CachedProjectInstructions)
 	executor.SetSkillsDirectory(m.services.Skill.PromptSection())
-	executor.SetSkillMatcher(m.services.Skill)
 	executor.SetMCPDependencies(m.services.MCP, m.services.MCP)
 	executor.SetDisabledTools(m.services.Setting.DisabledTools())
 

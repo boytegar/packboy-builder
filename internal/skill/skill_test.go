@@ -588,3 +588,33 @@ func TestResolveSkillDirs(t *testing.T) {
 		})
 	}
 }
+
+func TestSkillsSectionIsEscapedCatalog(t *testing.T) {
+	registry := NewRegistryForTest(map[string]*Skill{
+		"alpha": {
+			Name:         "alpha",
+			Description:  `Use <fast> & "safe"`,
+			ArgumentHint: `<file>`,
+			FilePath:     `/tmp/a&b/SKILL.md`,
+			State:        StateActive,
+		},
+		"hidden": {Name: "hidden", Description: "no", State: StateEnable},
+	}, &Store{states: map[string]SkillState{}}, &Store{states: map[string]SkillState{}})
+
+	section := registry.GetSkillsSection()
+	for _, want := range []string{
+		"<available_skills>",
+		"<name>alpha</name>",
+		"Use &lt;fast&gt; &amp; &quot;safe&quot;",
+		"<argument_hint>&lt;file&gt;</argument_hint>",
+		"/tmp/a&amp;b/SKILL.md",
+		"<skills_usage>",
+	} {
+		if !contains(section, want) {
+			t.Errorf("catalog missing %q:\n%s", want, section)
+		}
+	}
+	if contains(section, "hidden") {
+		t.Fatalf("enable-only skill leaked into catalog: %s", section)
+	}
+}

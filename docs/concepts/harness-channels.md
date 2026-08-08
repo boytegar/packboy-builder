@@ -74,7 +74,7 @@ harness has standard providers:
 
 | Provider ID | Source | Re-emit triggers |
 |---|---|---|
-| `skills-directory` | active skills (and the "use Skill tool to invoke" preamble) | session start, PostCompact, skill enable/disable/activate |
+| `skills-directory` | active-skill metadata catalog plus explicit-load instructions | session start, PostCompact, skill enable/disable/activate |
 | `memory-user` | `~/.pcb/AGENTS.md`, `~/AGENTS.md`, `~/.claude/CLAUDE.md`, `~/CLAUDE.md` | session start, PostCompact, file change |
 | `memory-project` | `<project>/AGENTS.md`, `<project>/CLAUDE.md`, `<project>/.claude/CLAUDE.md` | session start, PostCompact, file change, cwd change |
 
