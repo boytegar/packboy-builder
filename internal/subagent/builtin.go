@@ -58,7 +58,7 @@ func builtinAgentConfigs() []*AgentConfig {
 			// MaxSteps 0 = unlimited; no default cap.
 			SystemPrompt: researcherSystemPrompt,
 			WhenToUse:    "Research, codebase exploration, architecture questions, finding where code lives, understanding impact, tracing call paths, gathering context across multiple files before making changes.",
-			Source:        "builtin",
+			Source:       "builtin",
 		},
 	}
 }
