@@ -55,10 +55,10 @@ func builtinAgentConfigs() []*AgentConfig {
 			Description:    "Read-only research and codebase exploration agent. Use for any investigation that requires reading, searching, or cross-referencing multiple files before answering.",
 			Model:          "inherit",
 			PermissionMode: PermissionExplore,
-			MaxSteps:       100,
-			SystemPrompt:   researcherSystemPrompt,
-			WhenToUse:      "Research, codebase exploration, architecture questions, finding where code lives, understanding impact, tracing call paths, gathering context across multiple files before making changes.",
-			Source:         "builtin",
+			// MaxSteps 0 = unlimited; no default cap.
+			SystemPrompt: researcherSystemPrompt,
+			WhenToUse:    "Research, codebase exploration, architecture questions, finding where code lives, understanding impact, tracing call paths, gathering context across multiple files before making changes.",
+			Source:        "builtin",
 		},
 	}
 }

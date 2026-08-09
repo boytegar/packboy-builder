@@ -478,8 +478,27 @@ func (c *SlashCommandController) handleModelCommand(ctx context.Context, _ strin
 }
 
 func (c *SlashCommandController) handleInitCommand(_ context.Context, args string) (string, tea.Cmd, error) {
-	result, err := HandleInitCommand(c.env.Cwd, args)
-	return result, nil, err
+	// /init local and /init rules remain static file-creation paths; they do
+	// not start an agent turn. Bare /init (and /init --claude) dispatches the
+	// embedded PROJECT_CONTEXT_ARCHITECT workflow through the same
+	// skill-invocation pipeline as custom commands: stage the prompt as
+	// pending, then fire HandleSkillInvocation to submit the turn.
+	args = strings.TrimSpace(args)
+	parts := strings.Fields(args)
+	subCmd := ""
+	if len(parts) > 0 && !strings.HasPrefix(parts[0], "--") {
+		subCmd = strings.ToLower(parts[0])
+	}
+	switch subCmd {
+	case "local", "rules":
+		result, err := HandleInitCommand(c.env.Cwd, args)
+		return result, nil, err
+	default:
+		const fullName = "init"
+		c.env.Input.Skill.SetPending(fullName, command.WrapInvocation(fullName, command.ContextGeneratePrompt()))
+		c.env.Input.Skill.PendingArgs = formatSlashInvocation(fullName, args)
+		return "", c.env.HandleSkillInvocation(), nil
+	}
 }
 
 func (c *SlashCommandController) handleMemoryCommand(_ context.Context, args string) (string, tea.Cmd, error) {

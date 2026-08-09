@@ -336,7 +336,7 @@ func baseAgentConfig() *AgentConfig {
 		Description:    baseAgentDescription,
 		Model:          "inherit",
 		PermissionMode: PermissionDefault,
-		MaxSteps:       defaultMaxSteps,
+		// MaxSteps 0 = unlimited; no default cap.
 	}
 }
 
@@ -393,14 +393,17 @@ func (e *Executor) prepareRunConfig(ctx context.Context, req tool.AgentExecReque
 
 	permMode := e.requestPermissionMode(config, req)
 
-	maxSteps := defaultMaxSteps
+	// MaxSteps: 0 (unset) → unlimited. An explicit positive value caps the
+	// run; values below minMaxSteps are clamped up so an explicit cap is
+	// never unusably short. Resolution order: request > config > 0 (unlimited).
+	maxSteps := 0
 	if config.MaxSteps > 0 {
 		maxSteps = config.MaxSteps
 	}
 	if req.MaxSteps > 0 {
 		maxSteps = req.MaxSteps
 	}
-	if maxSteps < minMaxSteps {
+	if maxSteps > 0 && maxSteps < minMaxSteps {
 		maxSteps = minMaxSteps
 	}
 
@@ -586,7 +589,16 @@ func interpretStopReason(result *core.Result, maxSteps int) (success bool, errMs
 	success = result.StopReason == core.StopEndTurn
 	switch result.StopReason {
 	case core.StopMaxSteps:
-		errMsg = fmt.Sprintf("reached maximum steps (%d)", maxSteps)
+		// Report the actual steps taken (result.Steps) rather than the configured
+		// cap (maxSteps): the cap can be adjusted mid-run via core.Agent.SetMaxSteps,
+		// so a run that started at N and was raised to M still stops at M, not N.
+		if result.Steps > 0 {
+			errMsg = fmt.Sprintf("reached maximum steps (%d)", result.Steps)
+		} else if maxSteps > 0 {
+			errMsg = fmt.Sprintf("reached maximum steps (%d)", maxSteps)
+		} else {
+			errMsg = "reached maximum steps"
+		}
 	case core.StopMaxOutputRecoveryExhausted:
 		errMsg = "output was repeatedly truncated and recovery was exhausted"
 	case core.StopCancelled:

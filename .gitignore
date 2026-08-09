@@ -35,3 +35,4 @@ CLAUDE.local.md
 /layercheck
 # Added by code-review-graph
 .code-review-graph/
+.agents

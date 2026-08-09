@@ -162,3 +162,77 @@ func TestThinkActReportsEmptyContentWhenTurnEndsOnToolOnlyStep(t *testing.T) {
 		t.Errorf("Content = %q, want \"\" — the last step carried no assistant text", result.Content)
 	}
 }
+
+// TestSetMaxStepsAdjustsCapMidTurn pins that SetMaxSteps takes effect on the
+// next iteration without interrupting the in-flight turn. A cap raised between
+// steps must let the loop continue past the old limit; a cap lowered to 0 must
+// lift the limit entirely (0 = unlimited).
+func TestSetMaxStepsAdjustsCapMidTurn(t *testing.T) {
+	llm := &talkingLLM{text: "working"}
+	// Start with a cap of 2; the onInfer hook raises it to 5 after step 1.
+	ag := newContentAgent(llm, 2)
+	llm.onInfer = func(call int) {
+		if call == 1 {
+			ag.SetMaxSteps(5)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	result, err := ag.ThinkAct(ctx)
+	if err != nil {
+		t.Fatalf("ThinkAct returned error: %v", err)
+	}
+	if result.Steps < 3 {
+		t.Errorf("Steps = %d, want ≥3 — the raised cap should have let the loop run past the old 2", result.Steps)
+	}
+}
+
+// TestSetMaxStepsToZeroLiftsCap pins that setting 0 lifts the cap entirely.
+// The loop must run until the model ends the turn, not stop on the old limit.
+func TestSetMaxStepsToZeroLiftsCap(t *testing.T) {
+	// quietAfterFirst makes the LLM emit a tool call every step, so the loop
+	// never self-terminates; with the cap lifted it would spin forever. Cap
+	// it again after a few steps via the hook to bound the test.
+	llm := &talkingLLM{text: "working"}
+	ag := newContentAgent(llm, 2)
+	llm.onInfer = func(call int) {
+		if call == 1 {
+			ag.SetMaxSteps(0) // lift the cap
+		}
+		if call == 4 {
+			ag.SetMaxSteps(4) // re-impose to bound the test
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	result, err := ag.ThinkAct(ctx)
+	if err != nil {
+		t.Fatalf("ThinkAct returned error: %v", err)
+	}
+	if result.Steps != 4 {
+		t.Errorf("Steps = %d, want 4 — cap lifted on step 1, re-imposed at 4", result.Steps)
+	}
+	if result.StopReason != StopMaxSteps {
+		t.Fatalf("StopReason = %q, want %q", result.StopReason, StopMaxSteps)
+	}
+}
+
+// TestMaxStepsGetterReflectsSet pins the read-side API.
+func TestMaxStepsGetterReflectsSet(t *testing.T) {
+	ag := newContentAgent(&talkingLLM{text: "x"}, 0)
+	if got := ag.MaxSteps(); got != 0 {
+		t.Fatalf("MaxSteps() = %d, want 0 (unlimited) at construction", got)
+	}
+	ag.SetMaxSteps(42)
+	if got := ag.MaxSteps(); got != 42 {
+		t.Fatalf("MaxSteps() = %d, want 42 after SetMaxSteps", got)
+	}
+	ag.SetMaxSteps(0)
+	if got := ag.MaxSteps(); got != 0 {
+		t.Fatalf("MaxSteps() = %d, want 0 after lifting", got)
+	}
+}

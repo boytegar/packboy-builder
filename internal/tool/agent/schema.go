@@ -71,7 +71,7 @@ var agentToolParameters = map[string]any{
 		},
 		"max_steps": map[string]any{
 			"type":        "number",
-			"description": "Maximum number of LLM inference steps. Defaults to 500; values below the safe minimum are clamped to 10.",
+			"description": "Maximum number of LLM inference steps. Omit (or 0) for unlimited; values below the safe minimum are clamped to 10.",
 		},
 		"mode": map[string]any{
 			"type":        "string",
