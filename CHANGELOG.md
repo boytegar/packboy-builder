@@ -3,6 +3,13 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v1.23.2] - 2026-08-11
+
+### Changed
+- Rework `/tokenlimit` into an interactive budget editor: pick Main agent / Sub-agent / Sub-agent (write), set input + output limits, persisted to global settings.
+- Add `mainTokenLimit.outputTokenLimit` override; status-bar context percentage now uses the role-scoped main-agent budget so it never disagrees with auto-compaction.
+- Replace auto-fetch of current model's limits with a token-limit selector overlay.
+
 ## [v1.23.1] - 2026-08-09
 
 ### Added
