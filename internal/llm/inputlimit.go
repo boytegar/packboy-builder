@@ -33,6 +33,42 @@ func inputLimitOverride() int {
 	return n
 }
 
+// TokenRole identifies which agent context is resolving its window — the main
+// agent or a subagent. Each role can carry its own override set via
+// /tokenlimit, so the main agent and its subagents can budget different
+// windows. A zero-value TokenRole is TokenRoleMain.
+type TokenRole int
+
+const (
+	TokenRoleMain TokenRole = iota
+	TokenRoleAgent
+)
+
+// roleOverride returns the configured role-scoped input limit from
+// settings.json, or 0 when the role has no override of its own.
+func roleOverride(role TokenRole) int {
+	d := setting.Default()
+	switch role {
+	case TokenRoleAgent:
+		return d.AgentTokenLimit().InputTokenLimit
+	default:
+		return d.MainTokenLimit().InputTokenLimit
+	}
+}
+
+// EffectiveInputLimitFor resolves a model's context window the same way
+// EffectiveInputLimit does, but consults the role-scoped override first: the
+// role's own budget wins over the global TokenLimit. Main and agent each get
+// their own denomination.
+func (s *Store) EffectiveInputLimitFor(role TokenRole, provider Name, auth AuthMethod, modelID string) int {
+	// A role-specific /tokenlimit budget beats the global tokenLimit, so a
+	// tighter subagent window can't be widened by the main one.
+	if n := roleOverride(role); n > 0 {
+		return n
+	}
+	return s.EffectiveInputLimit(provider, auth, modelID)
+}
+
 // EffectiveInputLimit resolves a model's context window from configuration and
 // cache, returning 0 when it cannot be determined. Callers treat 0 as
 // "unknown" and skip whatever they would have done with a window rather than
@@ -68,4 +104,16 @@ func (s *Store) EffectiveInputLimit(provider Name, auth AuthMethod, modelID stri
 	}
 	in, _ := s.CachedModelLimits(modelID)
 	return in
+}
+
+// roleOutputOverride returns the configured role-scoped output-token cap from
+// settings.json, or 0 when the role has no override of its own.
+func roleOutputOverride(role TokenRole) int {
+	d := setting.Default()
+	switch role {
+	case TokenRoleAgent:
+		return d.AgentTokenLimit().OutputTokenLimit
+	default:
+		return d.MainTokenLimit().OutputTokenLimit
+	}
 }

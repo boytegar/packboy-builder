@@ -40,7 +40,7 @@ func agentSchema(agentDirectory string) core.ToolSchema {
 		sb.WriteString(agentDirectory)
 		sb.WriteString("\n\n")
 	}
-	sb.WriteString("Brief the agent with focused context: state the objective/question, relevant paths or symbols, known context, constraints, stop condition, and concise output format (include file:line refs). Do not ask it to broadly search the codebase. Use explore for read-only investigation and edit for file changes.\n\n")
+	sb.WriteString("Brief the agent with focused context: state the objective/question, relevant paths or symbols, known context, constraints, stop condition, and concise output format (include file:line refs). Always name the exact file path(s) the agent must analyse, plus the files related to each one (callers, implementations, tests, configs). Do not ask it to broadly search the codebase. Use explore for read-only investigation and edit for file changes.\n\n")
 	sb.WriteString("Launch independent agents concurrently. Use background mode only for work that does not block your next step. Verify the result before reporting it.")
 
 	return core.ToolSchema{
@@ -55,7 +55,7 @@ var agentToolParameters = map[string]any{
 	"properties": map[string]any{
 		"prompt": map[string]any{
 			"type":        "string",
-			"description": "Focused task brief: what to find/answer; scope (paths, packages, or symbols); known context; constraints; stop condition; expected concise output with file:line references.",
+			"description": "Focused task brief: what to find/answer; scope (paths, packages, or symbols); known context; constraints; stop condition; expected concise output with file:line references. Name the exact file path(s) to analyse and their related files (callers, implementations, tests, configs).",
 		},
 		"description": map[string]any{
 			"type":        "string",

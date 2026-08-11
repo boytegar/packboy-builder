@@ -881,20 +881,12 @@ func loopUsage() string {
 	return "Usage: /loop [interval] <prompt>\n       /loop once <interval> <prompt>\n       /loop once <prompt> in <interval>\n       /loop list\n       /loop delete <job-id>\n       /loop delete all\nExamples: /loop 5m check the deploy, /loop check the deploy every 20m, /loop once 20m check the deploy"
 }
 
-func (c *SlashCommandController) handleTokenLimitCommand(_ context.Context, args string) (string, tea.Cmd, error) {
-	result, cmd, err := HandleTokenLimitCommand(TokenLimitDeps{
-		CurrentModel: c.env.LLM.CurrentModel(),
-		Provider:     c.env.LLM.Provider(),
-		Store:        c.env.LLM.Store(),
-		InputTokens:  c.env.InputTokens,
-		Cwd:          c.env.Cwd,
-		SpinnerTick:  c.env.SpinnerTickCmd(),
-		ToolSvc:      c.env.ToolSvc,
-	}, args)
-	if cmd != nil {
-		c.env.Input.Provider.FetchingLimits = true
-	}
-	return result, cmd, err
+func (c *SlashCommandController) handleTokenLimitCommand(_ context.Context, _ string) (string, tea.Cmd, error) {
+	// Interactive budget editor: pick Main agent / Sub-agent / Sub-agent (write),
+	// type input + output limits, persisted to the global settings.json.
+	// Replaces the old auto-fetch of the current model's limits.
+	c.env.Input.TokenLimit.EnterSelect(c.env.Width, c.env.Height)
+	return "", nil, nil
 }
 
 func (c *SlashCommandController) handleCompactCommand(_ context.Context, args string) (string, tea.Cmd, error) {
@@ -958,7 +950,7 @@ func shouldPreserveCommandInConversation(inputText string) bool {
 	// /goal is kept for the same reason as the others: it is the instruction the
 	// rest of the run answers to, so a transcript that drops it reads as the
 	// copilot driving for no stated reason.
-	case "compact", "fork", "resume", "loop", "init", "tokenlimit", "goal":
+	case "compact", "fork", "resume", "loop", "init", "goal":
 		return true
 	}
 	return false

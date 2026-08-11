@@ -14,6 +14,9 @@
 package app
 
 import (
+	"fmt"
+	"time"
+
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"go.uber.org/zap"
@@ -78,6 +81,7 @@ func (m *model) overlayPanels() []overlayPanel {
 		&m.userInput.Config,
 		&m.userInput.Autopilot,
 		&m.userInput.Evolve,
+		&m.userInput.TokenLimit,
 	}
 }
 
@@ -160,6 +164,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			log.Logger().Warn("reload settings after tool toggle failed", zap.Error(err))
 		}
 		return m, nil
+	case input.TokenLimitSavedMsg:
+		// The /tokenlimit overlay persisted a role-scoped budget to the global
+		// settings.json. Reload the live settings handle so the runtime resolver
+		// (compaction + status bar) picks it up; the running agent reads the
+		// window on its next step, so a saved budget applies without a rebuild.
+		if err := m.services.Setting.Reload(m.env.CWD); err != nil {
+			log.Logger().Warn("reload settings after token limit save failed", zap.Error(err))
+		}
+		status := "Token limits saved: " + msg.Target
+		if msg.Input > 0 || msg.Output > 0 {
+			status = fmt.Sprintf("%s — in %s · out %s",
+				status, kit.FormatTokenCount(msg.Input), kit.FormatTokenCount(msg.Output))
+		} else {
+			status += " (cleared)"
+		}
+		token := m.userInput.Provider.SetStatusMessage(status)
+		return m, kit.StatusTimer(4*time.Second, token)
 	case input.MissionRefinedMsg:
 		// The /autopilot Mission editor's refined text arrived; hand it to the
 		// panel to replace the draft (or surface an error under the editor).
@@ -381,7 +402,6 @@ func (m *model) routeToSubModel(msg tea.Msg) (tea.Cmd, bool) {
 func (m *model) needsSpinner() bool {
 	return m.conv.Stream.Active ||
 		m.conv.Compact.Active ||
-		m.userInput.Provider.FetchingLimits ||
 		m.conv.AnalyzingImages ||
 		m.hasRunningBackgroundTask()
 }

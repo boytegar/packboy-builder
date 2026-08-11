@@ -267,7 +267,6 @@ func providerBestAuthMethodStatus(methods []providerAuthMethodItem) llm.Status {
 // Domain state (LLM, Store, CurrentModel, tokens, thinking) lives
 // on the parent app model, not here.
 type ProviderState struct {
-	FetchingLimits bool
 	Selector       ProviderSelector
 	StatusMessage  string // Temporary status shown in status bar
 	statusToken    int64

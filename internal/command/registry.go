@@ -36,7 +36,7 @@ func builtinCommands() []Info {
 		{Name: "agents", Description: "Manage available agents (enable/disable)"},
 		{Name: "identity", Description: "Alias of /persona — switch the active persona (/identity <name>, or /identity to open the picker)"},
 		{Name: "persona", Description: "Switch the active persona (/persona <name>, or /persona to open the picker)"},
-		{Name: "tokenlimit", Description: "View or set token limits for current model"},
+		{Name: "tokenlimit", Description: "Set token limits (input/output) for main agent and sub-agents, saved to global settings"},
 		{Name: "compact", Description: "Summarize conversation to reduce context size"},
 		{Name: "init", Description: "Initialize memory files (AGENTS.md, CLAUDE.md via --claude, rules)"},
 		{Name: "memory", Description: "View and manage memory files (list/show/edit) with @import support"},

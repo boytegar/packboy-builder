@@ -8,7 +8,7 @@ Token usage is tracked per turn and accumulated across the session. Cost is calc
 - **Session total:** cumulative across all turns
 - **Display:** status bar shows running totals
 - **Pricing:** model-aware; updates when the model changes
-- **Token limits:** `/tokenlimit <input> <output>` can persist a manual override
+- **Token limits:** `/tokenlimit` sets input/output budgets for the main agent vs sub-agents, saved to global settings
 
 
 
@@ -41,7 +41,7 @@ Cache write tokens are not persisted.
 ## UI Interactions
 
 - **Status bar**: shows `in: N / out: N / $X.XX` after each turn.
-- **`/tokenlimit`**: shows current usage and the model's context limit in a popup.
+- **`/tokenlimit`**: sets the main/agent context-window budgets (input + output) via a selector; the status bar's context percentage uses the saved main budget.
 - **Auto-compact warning**: a notice appears when usage exceeds 80% of the limit.
 
 ## Automated Tests
@@ -138,11 +138,15 @@ sleep 6
 tmux capture-pane -t t_cost -p | tail -3
 # Expected: cost updates reflect new model pricing
 
-# Test 6: Manual token limit override
-tmux send-keys -t t_cost '/tokenlimit 123456 4096' Enter
+# Test 6: Token limit selector
+tmux send-keys -t t_cost '/tokenlimit' Enter
+sleep 1
+tmux send-keys -t t_cost Enter
+sleep 1
+tmux send-keys -t t_cost '200000' Tab '16000' Enter
 sleep 2
 tmux capture-pane -t t_cost -p
-# Expected: token limit display shows the custom override values
+# Expected: Main agent limits set and saved to ~/.pcb/settings.json
 
 tmux kill-session -t t_cost
 ```

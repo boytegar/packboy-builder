@@ -146,6 +146,28 @@ func (s *Settings) TokenLimit() int {
 	return s.data.TokenLimit
 }
 
+// MainTokenLimit returns the role-scoped main-agent override from settings.json
+// (0 input or output = unset).
+func (s *Settings) MainTokenLimit() TokenLimitOverride {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.data == nil {
+		return TokenLimitOverride{}
+	}
+	return s.data.MainTokenLimit
+}
+
+// AgentTokenLimit returns the role-scoped sub-agent override from settings.json
+// (0 input or output = unset).
+func (s *Settings) AgentTokenLimit() TokenLimitOverride {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.data == nil {
+		return TokenLimitOverride{}
+	}
+	return s.data.AgentTokenLimit
+}
+
 func (s *Settings) SetSearchProvider(provider string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

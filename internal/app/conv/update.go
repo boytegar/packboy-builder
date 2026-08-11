@@ -4,7 +4,6 @@ package conv
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/boytegar/packboy-builder/internal/app/kit"
 	"github.com/boytegar/packboy-builder/internal/core"
 	"github.com/boytegar/packboy-builder/internal/log"
 	"github.com/boytegar/packboy-builder/internal/tool"
@@ -27,8 +26,6 @@ func Update(rt Runtime, m *Model, msg tea.Msg) (tea.Cmd, bool) {
 		return rt.OnPermGateRequest(msg.Request), true
 	case CompactResultMsg:
 		return rt.OnCompactResult(msg), true
-	case kit.TokenLimitResultMsg:
-		return rt.OnTokenLimitResult(msg), true
 	case AgentActivityMsg:
 		if msg.Index < 0 && msg.ToolCallID != "" {
 			msg.Index = m.Tool.IndexOf(msg.ToolCallID)

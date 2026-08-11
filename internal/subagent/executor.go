@@ -495,7 +495,7 @@ func (e *Executor) buildAgent(ctx context.Context, run *preparedRun, onToolExec 
 	permFn := subagentPermissionFunc(rc.permMode, rc.config.AllowTools, rc.config.DenyTools)
 	coreTools = tool.WithPermission(coreTools, permFn)
 
-	llmClient := llm.NewClient(rc.provider, rc.modelID, 0)
+	llmClient := llm.NewClientWithRole(rc.provider, rc.modelID, 0, llm.TokenRoleAgent)
 	ag = core.NewAgent(core.Config{
 		LLM:         llmClient,
 		System:      sys,

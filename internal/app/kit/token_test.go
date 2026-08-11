@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/boytegar/packboy-builder/internal/llm"
+	"github.com/boytegar/packboy-builder/internal/setting"
 )
 
 // TestGetModelTokenLimitsPrefersCurrentProvider guards against the status-bar
@@ -124,5 +125,59 @@ func TestGetEffectiveInputLimitWithoutModelIsZero(t *testing.T) {
 	t.Setenv(llm.InputLimitEnvVar, "500000")
 	if got := GetEffectiveInputLimit(nil, nil); got != 0 {
 		t.Fatalf("GetEffectiveInputLimit(nil, nil) = %d, want 0", got)
+	}
+}
+
+// The settings.json mainTokenLimit.outputTokenLimit override must win over the
+// provider cache. This is the regression the fix targets: previously GetMaxTokens
+// only consulted providers.json / the model cache, so a /tokenlimit budget set
+// for the main agent was silently ignored and the provider's cap won instead.
+func TestGetMaxTokensSettingsOverrideWinsOverProviderCache(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	store, err := llm.NewStore()
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	if err := store.CacheModels(llm.OpenAI, llm.AuthAPIKey, []llm.ModelInfo{
+		{ID: "m", InputTokenLimit: 200000, OutputTokenLimit: 16000},
+	}); err != nil {
+		t.Fatalf("CacheModels: %v", err)
+	}
+
+	defer setting.ResetDefaultSettings()
+	setting.SetDefaultSettings(setting.New(&setting.Data{
+		MainTokenLimit: setting.TokenLimitOverride{InputTokenLimit: 120000, OutputTokenLimit: 6000},
+	}))
+
+	got := GetMaxTokens(store, &llm.CurrentModelInfo{
+		ModelID: "m", Provider: llm.OpenAI, AuthMethod: llm.AuthAPIKey,
+	}, setting.DefaultMaxTokens)
+	if got != 6000 {
+		t.Fatalf("GetMaxTokens() = %d, want 6000 (settings.json mainTokenLimit.outputTokenLimit)", got)
+	}
+}
+
+// Without a settings.json output override the provider cache still wins, so the
+// fix must not regress the plain provider-driven path.
+func TestGetMaxTokensFallsBackToProviderCache(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	store, err := llm.NewStore()
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	if err := store.CacheModels(llm.OpenAI, llm.AuthAPIKey, []llm.ModelInfo{
+		{ID: "m", InputTokenLimit: 200000, OutputTokenLimit: 16000},
+	}); err != nil {
+		t.Fatalf("CacheModels: %v", err)
+	}
+
+	defer setting.ResetDefaultSettings()
+	setting.ResetDefaultSettings()
+
+	got := GetMaxTokens(store, &llm.CurrentModelInfo{
+		ModelID: "m", Provider: llm.OpenAI, AuthMethod: llm.AuthAPIKey,
+	}, setting.DefaultMaxTokens)
+	if got != 16000 {
+		t.Fatalf("GetMaxTokens() = %d, want 16000 (provider cache, no settings override)", got)
 	}
 }

@@ -267,14 +267,6 @@ func (m model) renderChatSection(activeContent, trackerView string) string {
 		parts = append(parts, "\n"+strings.TrimSuffix(trackerView, "\n"))
 	}
 
-	if m.userInput.Provider.FetchingLimits {
-		spinnerView := conv.ThinkingStyle.Render(m.conv.Spinner.View() + " Fetching token limits...")
-		if len(parts) > 0 {
-			spinnerView = "\n" + spinnerView
-		}
-		parts = append(parts, spinnerView)
-	}
-
 	if m.conv.AnalyzingImages {
 		spinnerView := conv.ThinkingStyle.Render(m.conv.Spinner.View() + " Analyzing image...")
 		if len(parts) > 0 {
@@ -379,7 +371,7 @@ func (m model) renderModeStatus() string {
 		Bypass:            m.env.SessionPermissions.IsBypassSafe(),
 		Persona:           activePersonaName(&m),
 		InputTokens:       m.env.InputTokens,
-		InputLimit:        kit.GetEffectiveInputLimit(m.services.LLM.Store(), m.env.CurrentModel),
+		InputLimit:        kit.GetEffectiveInputLimitFor(llm.TokenRoleMain, m.services.LLM.Store(), m.env.CurrentModel),
 		ModelName:         modelName,
 		WriteModelName:    writeModelName,
 		StatusMessage:     m.userInput.Provider.StatusMessage,

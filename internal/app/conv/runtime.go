@@ -3,7 +3,6 @@ package conv
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/boytegar/packboy-builder/internal/app/kit"
 	"github.com/boytegar/packboy-builder/internal/core"
 )
 
@@ -35,7 +34,6 @@ type Runtime interface {
 	OnCompactStart(count int) tea.Cmd
 	OnCompacted(info core.CompactInfo) tea.Cmd
 	OnCompactResult(msg CompactResultMsg) tea.Cmd
-	OnTokenLimitResult(msg kit.TokenLimitResultMsg) tea.Cmd
 	HasRunningTasks() bool
 }
 

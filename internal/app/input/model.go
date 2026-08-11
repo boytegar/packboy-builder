@@ -56,14 +56,15 @@ type Model struct {
 	Secret   SecretPromptModel
 
 	// Self-contained selectors.
-	Agent     AgentSelector
-	Persona   PersonaSelector
-	Search    SearchSelector
-	Plugin    PluginSelector
-	Tool      ToolSelector
-	Config    PanelPopup        // /config: appearance (+ future provider/permissions)
-	Evolve    PanelPopup        // /evolve: self-learning skills + memory
-	Autopilot AutopilotSelector // /autopilot: the session copilot
+	Agent      AgentSelector
+	Persona    PersonaSelector
+	Search     SearchSelector
+	Plugin     PluginSelector
+	Tool       ToolSelector
+	Config     PanelPopup         // /config: appearance (+ future provider/permissions)
+	Evolve     PanelPopup         // /evolve: self-learning skills + memory
+	Autopilot  AutopilotSelector  // /autopilot: the session copilot
+	TokenLimit TokenLimitSelector // /tokenlimit: role-scoped window budgets
 
 	// Selectors carrying ambient state (the picker is the .Selector field).
 	Skill    SkillState    // + pending skill invocation
@@ -140,21 +141,22 @@ func New(cwd string, width int, matchFunc suggest.Matcher, deps SelectorDeps) Mo
 		Suggestions: suggestions,
 		Queue:       NewQueue(),
 
-		Approval:  NewApproval(),
-		Secret:    NewSecretPrompt(),
-		Agent:     NewAgentSelector(deps.AgentRegistry),
-		Persona:   NewPersonaSelector(deps.PersonaRegistry, deps.Setting),
-		Search:    NewSearchSelector(deps.Setting),
-		Skill:     SkillState{Selector: NewSkillSelector(deps.SkillRegistry)},
-		Session:   SessionState{Selector: NewSessionSelector()},
-		Memory:    MemoryState{Selector: NewMemorySelector()},
-		MCP:       MCPState{Selector: NewMCPSelector(deps.MCPRegistry)},
-		Plugin:    NewPluginSelector(deps.PluginRegistry),
-		Provider:  ProviderState{Selector: newProviderSelectorWithAgents(deps)},
-		Tool:      NewToolSelector(deps.LoadDisabled, deps.UpdateDisabled),
-		Config:    NewConfigSelector(deps.Setting),
-		Autopilot: NewAutopilotSelector(),
-		Evolve:    NewEvolveSelector(deps.Evolve),
+		Approval:   NewApproval(),
+		Secret:     NewSecretPrompt(),
+		Agent:      NewAgentSelector(deps.AgentRegistry),
+		Persona:    NewPersonaSelector(deps.PersonaRegistry, deps.Setting),
+		Search:     NewSearchSelector(deps.Setting),
+		Skill:      SkillState{Selector: NewSkillSelector(deps.SkillRegistry)},
+		Session:    SessionState{Selector: NewSessionSelector()},
+		Memory:     MemoryState{Selector: NewMemorySelector()},
+		MCP:        MCPState{Selector: NewMCPSelector(deps.MCPRegistry)},
+		Plugin:     NewPluginSelector(deps.PluginRegistry),
+		Provider:   ProviderState{Selector: newProviderSelectorWithAgents(deps)},
+		Tool:       NewToolSelector(deps.LoadDisabled, deps.UpdateDisabled),
+		Config:     NewConfigSelector(deps.Setting),
+		Autopilot:  NewAutopilotSelector(),
+		Evolve:     NewEvolveSelector(deps.Evolve),
+		TokenLimit: NewTokenLimitSelector(),
 	}
 }
 
