@@ -52,6 +52,8 @@ type Executor struct {
 	mcpServers                 mcp.Servers          // connect/disconnect for per-subagent server sets
 	disabledToolsMu            sync.RWMutex
 	disabledTools              map[string]bool // effective global disabled tools, copied on set/read
+	recursionDepth             int             // current nesting level (0 = main agent)
+	maxRecursionDepth          int             // max allowed nesting (0 = unlimited)
 
 	// runsMu guards liveRuns, the registry of in-flight runs keyed by their
 	// broker address (TaskID for background, hookID for foreground). A run is
@@ -107,7 +109,8 @@ func PermissionModeFromOperationMode(mode setting.OperationMode) PermissionMode 
 // parent permission mode getter.
 func NewExecutor(llmProvider llm.Provider, cwd string, parentModelID string, hookEngine hook.Handler) *Executor {
 	return &Executor{
-		provider:      llmProvider,
+		provider:          llmProvider,
+		maxRecursionDepth: 5, // default max depth
 		registry:      Default(),
 		cwd:           cwd,
 		parentModelID: parentModelID,
@@ -476,6 +479,14 @@ func (e *Executor) buildAgent(ctx context.Context, run *preparedRun, onToolExec 
 	if run.req.OnQuestion != nil {
 		adaptOpts = append(adaptOpts, tool.WithAskUser(tool.AskUserFunc(run.req.OnQuestion)))
 	}
+	
+	// For recursive subagent support: inject Agent tool with child executor
+	// Only in agent mode (depth > 0) with PermissionAuto/Bypass permission
+	if e.recursionDepth > 0 && (rc.permMode == PermissionAuto || rc.permMode == PermissionBypass) && e.maxRecursionDepth > 0 && e.recursionDepth < e.maxRecursionDepth {
+		childExecutor := e.createChildExecutor()
+		adaptOpts = append(adaptOpts, tool.WithAgentExecutor(NewExecutorAdapter(childExecutor)))
+	}
+	
 	tools := tool.AdaptToolRegistry(schemas, func() string { return agentCwd }, adaptOpts...)
 
 	// Add MCP tool executors
@@ -906,6 +917,35 @@ func newAgentToolSet(allow, disallow []string, disabled map[string]bool, mcpGett
 	}
 	s.InitDisallowSet()
 	return s
+}
+
+// createChildExecutor clones this executor with recursion depth + 1
+func (e *Executor) createChildExecutor() *Executor {
+	child := &Executor{
+		provider:                   e.provider,
+		registry:                   e.registry,
+		resolver:                   e.resolver,
+		modelStore:                 e.modelStore,
+		parentProviderName:         e.parentProviderName,
+		parentAuthMethod:           e.parentAuthMethod,
+		cwd:                        e.cwd,
+		parentModelID:              e.parentModelID,
+		parentPermissionModeGetter: e.parentPermissionModeGetter,
+		hooks:                      e.hooks,
+		sessionStore:               e.sessionStore,
+		parentSessionID:            e.parentSessionID,
+		projectInstructions:        e.projectInstructions,
+		skillsPrompt:               e.skillsPrompt,
+		skillMatcher:               e.skillMatcher,
+		mcpTools:                   e.mcpTools,
+		mcpServers:                 e.mcpServers,
+		disabledTools:              maps.Clone(e.disabledToolsSnapshot()),
+		recursionDepth:             e.recursionDepth + 1,
+		maxRecursionDepth:          e.maxRecursionDepth,
+		liveRuns:                   make(map[string]*preparedRun),
+		subagentModelOverride:      e.subagentModelOverride,
+	}
+	return child
 }
 
 // generateShortID creates a short random hex ID for background tasks.

@@ -62,6 +62,11 @@ func (e *Executor) prepareRun(ctx context.Context, req tool.AgentExecRequest) (*
 		return nil, err
 	}
 
+	// Check recursion depth limit
+	if e.maxRecursionDepth > 0 && e.recursionDepth >= e.maxRecursionDepth {
+		return nil, fmt.Errorf("maximum agent recursion depth (%d) exceeded", e.maxRecursionDepth)
+	}
+
 	cfg, err := e.prepareRunConfig(ctx, req)
 	if err != nil {
 		return nil, err

@@ -256,6 +256,16 @@ func (m model) renderChatSection(activeContent, trackerView string) string {
 		parts = append(parts, banner, "")
 	}
 
+	// Status overview panel (LSPs · Skills · MCPs) shown while the session is
+	// still fresh — no committed scrollback yet — mirroring crush's landing
+	// view. Rendered live so it reflects the model picked at launch and any
+	// lazy MCP/LSP auto-connect that lands before the first commit.
+	if m.welcomePending && m.conv.CommittedCount == 0 {
+		if status := m.renderStatusOverview(); status != "" {
+			parts = append(parts, status, "")
+		}
+	}
+
 	if activeContent != "" {
 		parts = append(parts, activeContent)
 	}

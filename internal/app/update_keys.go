@@ -55,7 +55,59 @@ func (m *model) routeKeypress(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return c, ok
 	}
 
+	// Status-panel horizontal pan. Only active while the startup status panel
+	// is shown (fresh session, no committed messages). Shift←/Shift→ pan the
+	// clipped four-column overview when the terminal is too narrow. Claimed
+	// before the textarea so the arrows don't move the prompt cursor.
+	if m.statusPanelVisible() {
+		if c, ok := m.handleStatusPanelScroll(msg); ok {
+			return c, ok
+		}
+	}
+
 	return m.handleTextareaShortcut(msg)
+}
+
+// statusPanelVisible reports whether the startup status panel currently owns a
+// horizontally-scrollable view — i.e. the session is fresh (no committed
+// messages) and the panel actually rendered last frame.
+func (m model) statusPanelVisible() bool {
+	return m.welcomePending && m.conv.CommittedCount == 0
+}
+
+// handleStatusPanelScroll pans the startup status panel horizontally with
+// Shift←/Shift→ (scroll step = one column would be tedious; use a quarter of
+// the viewport, at least one full column). Returns (cmd, true) on a handled
+// key. left/right/=handled keys are intentionally not bound, so bare arrow keys
+// keep their textarea meaning.
+func (m model) handleStatusPanelScroll(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if msg.Key().Mod != tea.ModShift {
+		return nil, false
+	}
+	var delta int
+	switch msg.Key().Code {
+	case tea.KeyRight:
+		delta = 1
+	case tea.KeyLeft:
+		delta = -1
+	default:
+		return nil, false
+	}
+	m.statusPanelScrollX += delta * statusPanelScrollStep(m.env.Width)
+	if m.statusPanelScrollX < 0 {
+		m.statusPanelScrollX = 0
+	}
+	return nil, true
+}
+
+// statusPanelScrollStep is the horizontal pan distance in columns — a quarter
+// of the visible viewport, at least one.
+func statusPanelScrollStep(viewport int) int {
+	s := viewport / 4
+	if s < 1 {
+		return 1
+	}
+	return s
 }
 
 // handleTextareaShortcut handles keys that target the textarea itself:

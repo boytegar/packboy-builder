@@ -66,6 +66,13 @@ type model struct {
 	// model_scrollback.go (takeWelcomeBanner).
 	welcomePending bool
 
+	// statusPanelScrollX is the horizontal scroll offset (in columns) of the
+	// startup status panel. When the terminal is too narrow to fit all four
+	// columns (LSPs · Skills · MCPs · Agents), Shift←/Shift→ pan the clipped
+	// viewport. Only meaningful while welcomePending && no committed messages;
+	// reset by the panel whenever it disappears.
+	statusPanelScrollX int
+
 	// reviewerApprovals / reviewerEscalations count auto-review outcomes this
 	// session for the status bar: gray-zone tool calls the judge auto-approved
 	// vs. handed back to the user. Pointers so value-receiver copies of the
