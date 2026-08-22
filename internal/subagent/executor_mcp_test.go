@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/boytegar/packboy-builder/internal/core"
+	"github.com/boytegar/packboy-builder/internal/mcp"
 	"github.com/boytegar/packboy-builder/internal/tool"
 )
 
@@ -112,10 +113,13 @@ func TestSubagentPermissionFuncMCPAllowTools(t *testing.T) {
 }
 
 func TestMCPToolNameClassification(t *testing.T) {
-	if !IsMCPToolName("mcp__server__read_file") {
+	isMCP := func(name string) bool {
+		return mcp.IsMCPTool(name)
+	}
+	if !isMCP("mcp__server__read_file") {
 		t.Fatal("mcp__server__read_file should classify as MCP")
 	}
-	if IsMCPToolName("Read") || IsMCPToolName("mcp__server") || IsMCPToolName("mcp__") {
+	if isMCP("Read") || isMCP("mcp__server") || isMCP("mcp__") {
 		t.Fatal("non-MCP names misclassified")
 	}
 }
