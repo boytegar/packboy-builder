@@ -48,6 +48,13 @@ var kgEvalPrompt string
 //go:embed prompts/kg-rag.md
 var kgRagPrompt string
 
+//go:embed prompts/context-generate.md
+var contextGeneratePrompt string
+
+// ContextGeneratePrompt returns the embedded PROJECT_CONTEXT_ARCHITECT workflow body
+// used by /init to generate AGENTS.md and the .agents/ documentation set.
+func ContextGeneratePrompt() string { return contextGeneratePrompt }
+
 // builtinPromptCommands are slash commands that ship with Packboy Builder as embedded
 // markdown workflows rather than Go handlers. They dispatch through the same
 // <custom-command> pipeline as user-defined commands, and a user or project

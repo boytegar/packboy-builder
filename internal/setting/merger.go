@@ -16,6 +16,8 @@ func mergeSettings(base, overlay *Data) *Data {
 	result.Permissions = mergePermissions(base.Permissions, overlay.Permissions)
 	result.Model = coalesce(overlay.Model, base.Model)
 	result.TokenLimit = coalesceInt(overlay.TokenLimit, base.TokenLimit)
+	result.MainTokenLimit = coalesceTokenLimit(overlay.MainTokenLimit, base.MainTokenLimit)
+	result.AgentTokenLimit = coalesceTokenLimit(overlay.AgentTokenLimit, base.AgentTokenLimit)
 	result.Theme = coalesce(overlay.Theme, base.Theme)
 	result.Hooks = mergeHooks(base.Hooks, overlay.Hooks)
 	result.Env = mergeMaps(base.Env, overlay.Env)
@@ -103,6 +105,16 @@ func coalesceInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// coalesceTokenLimit merges two role-scoped token overrides field-by-field so a
+// partial overlay (only input set, or only output set) still falls through to
+// the base for the unset half.
+func coalesceTokenLimit(a, b TokenLimitOverride) TokenLimitOverride {
+	return TokenLimitOverride{
+		InputTokenLimit:  coalesceInt(a.InputTokenLimit, b.InputTokenLimit),
+		OutputTokenLimit: coalesceInt(a.OutputTokenLimit, b.OutputTokenLimit),
+	}
 }
 
 func mergePermissions(base, overlay PermissionSettings) PermissionSettings {

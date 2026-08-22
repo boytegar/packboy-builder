@@ -95,6 +95,15 @@ type Agent interface {
 	// closed and the interrupt is latched so the next iteration of the
 	// inner loop bails before starting an unwanted ThinkAct.
 	InterruptCurrentTurn() <-chan struct{}
+
+	// SetMaxSteps adjusts the per-turn LLM inference step cap at runtime.
+	// 0 means unlimited. The cap is read at the top of every iteration of
+	// the ThinkAct loop, so a change takes effect on the next step — no
+	// need to interrupt the in-flight turn. Safe to call concurrently.
+	SetMaxSteps(maxSteps int)
+
+	// MaxSteps returns the current per-turn step cap, or 0 for unlimited.
+	MaxSteps() int
 }
 
 // Config holds construction parameters for an agent.
@@ -165,7 +174,6 @@ func NewAgent(cfg Config) Agent {
 		compactFunc:       cfg.CompactFunc,
 		llm:               cfg.LLM,
 		cwd:               cfg.CWD,
-		maxSteps:          cfg.MaxSteps,
 		maxOutputRecovery: cfg.MaxOutputRecovery,
 		maxTurnRetries:    cfg.MaxTurnRetries,
 		firstChunkTimeout: cfg.StreamFirstChunkTimeout,
@@ -174,6 +182,7 @@ func NewAgent(cfg Config) Agent {
 		outbox:            outbox,
 		onEvent:           cfg.OnEvent,
 	}
+	a.maxSteps.Store(int64(cfg.MaxSteps))
 	// Mirror system + tools mutations onto the event bus. Attach after
 	// construction so each registry replays its initial members back to the
 	// observer — the recorder sees a complete event chain from t0.

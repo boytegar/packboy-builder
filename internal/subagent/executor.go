@@ -52,6 +52,8 @@ type Executor struct {
 	mcpServers                 mcp.Servers          // connect/disconnect for per-subagent server sets
 	disabledToolsMu            sync.RWMutex
 	disabledTools              map[string]bool // effective global disabled tools, copied on set/read
+	recursionDepth             int             // current nesting level (0 = main agent)
+	maxRecursionDepth          int             // max allowed nesting (0 = unlimited)
 
 	// runsMu guards liveRuns, the registry of in-flight runs keyed by their
 	// broker address (TaskID for background, hookID for foreground). A run is
@@ -107,7 +109,8 @@ func PermissionModeFromOperationMode(mode setting.OperationMode) PermissionMode 
 // parent permission mode getter.
 func NewExecutor(llmProvider llm.Provider, cwd string, parentModelID string, hookEngine hook.Handler) *Executor {
 	return &Executor{
-		provider:      llmProvider,
+		provider:          llmProvider,
+		maxRecursionDepth: 5, // default max depth
 		registry:      Default(),
 		cwd:           cwd,
 		parentModelID: parentModelID,
@@ -336,7 +339,7 @@ func baseAgentConfig() *AgentConfig {
 		Description:    baseAgentDescription,
 		Model:          "inherit",
 		PermissionMode: PermissionDefault,
-		MaxSteps:       defaultMaxSteps,
+		// MaxSteps 0 = unlimited; no default cap.
 	}
 }
 
@@ -393,14 +396,17 @@ func (e *Executor) prepareRunConfig(ctx context.Context, req tool.AgentExecReque
 
 	permMode := e.requestPermissionMode(config, req)
 
-	maxSteps := defaultMaxSteps
+	// MaxSteps: 0 (unset) → unlimited. An explicit positive value caps the
+	// run; values below minMaxSteps are clamped up so an explicit cap is
+	// never unusably short. Resolution order: request > config > 0 (unlimited).
+	maxSteps := 0
 	if config.MaxSteps > 0 {
 		maxSteps = config.MaxSteps
 	}
 	if req.MaxSteps > 0 {
 		maxSteps = req.MaxSteps
 	}
-	if maxSteps < minMaxSteps {
+	if maxSteps > 0 && maxSteps < minMaxSteps {
 		maxSteps = minMaxSteps
 	}
 
@@ -473,6 +479,14 @@ func (e *Executor) buildAgent(ctx context.Context, run *preparedRun, onToolExec 
 	if run.req.OnQuestion != nil {
 		adaptOpts = append(adaptOpts, tool.WithAskUser(tool.AskUserFunc(run.req.OnQuestion)))
 	}
+	
+	// For recursive subagent support: inject Agent tool with child executor
+	// Only in agent mode (depth > 0) with PermissionAuto/Bypass permission
+	if e.recursionDepth > 0 && (rc.permMode == PermissionAuto || rc.permMode == PermissionBypass) && e.maxRecursionDepth > 0 && e.recursionDepth < e.maxRecursionDepth {
+		childExecutor := e.createChildExecutor()
+		adaptOpts = append(adaptOpts, tool.WithAgentExecutor(NewExecutorAdapter(childExecutor)))
+	}
+	
 	tools := tool.AdaptToolRegistry(schemas, func() string { return agentCwd }, adaptOpts...)
 
 	// Add MCP tool executors
@@ -492,7 +506,7 @@ func (e *Executor) buildAgent(ctx context.Context, run *preparedRun, onToolExec 
 	permFn := subagentPermissionFunc(rc.permMode, rc.config.AllowTools, rc.config.DenyTools)
 	coreTools = tool.WithPermission(coreTools, permFn)
 
-	llmClient := llm.NewClient(rc.provider, rc.modelID, 0)
+	llmClient := llm.NewClientWithRole(rc.provider, rc.modelID, 0, llm.TokenRoleAgent)
 	ag = core.NewAgent(core.Config{
 		LLM:         llmClient,
 		System:      sys,
@@ -586,7 +600,16 @@ func interpretStopReason(result *core.Result, maxSteps int) (success bool, errMs
 	success = result.StopReason == core.StopEndTurn
 	switch result.StopReason {
 	case core.StopMaxSteps:
-		errMsg = fmt.Sprintf("reached maximum steps (%d)", maxSteps)
+		// Report the actual steps taken (result.Steps) rather than the configured
+		// cap (maxSteps): the cap can be adjusted mid-run via core.Agent.SetMaxSteps,
+		// so a run that started at N and was raised to M still stops at M, not N.
+		if result.Steps > 0 {
+			errMsg = fmt.Sprintf("reached maximum steps (%d)", result.Steps)
+		} else if maxSteps > 0 {
+			errMsg = fmt.Sprintf("reached maximum steps (%d)", maxSteps)
+		} else {
+			errMsg = "reached maximum steps"
+		}
 	case core.StopMaxOutputRecoveryExhausted:
 		errMsg = "output was repeatedly truncated and recovery was exhausted"
 	case core.StopCancelled:
@@ -894,6 +917,35 @@ func newAgentToolSet(allow, disallow []string, disabled map[string]bool, mcpGett
 	}
 	s.InitDisallowSet()
 	return s
+}
+
+// createChildExecutor clones this executor with recursion depth + 1
+func (e *Executor) createChildExecutor() *Executor {
+	child := &Executor{
+		provider:                   e.provider,
+		registry:                   e.registry,
+		resolver:                   e.resolver,
+		modelStore:                 e.modelStore,
+		parentProviderName:         e.parentProviderName,
+		parentAuthMethod:           e.parentAuthMethod,
+		cwd:                        e.cwd,
+		parentModelID:              e.parentModelID,
+		parentPermissionModeGetter: e.parentPermissionModeGetter,
+		hooks:                      e.hooks,
+		sessionStore:               e.sessionStore,
+		parentSessionID:            e.parentSessionID,
+		projectInstructions:        e.projectInstructions,
+		skillsPrompt:               e.skillsPrompt,
+		skillMatcher:               e.skillMatcher,
+		mcpTools:                   e.mcpTools,
+		mcpServers:                 e.mcpServers,
+		disabledTools:              maps.Clone(e.disabledToolsSnapshot()),
+		recursionDepth:             e.recursionDepth + 1,
+		maxRecursionDepth:          e.maxRecursionDepth,
+		liveRuns:                   make(map[string]*preparedRun),
+		subagentModelOverride:      e.subagentModelOverride,
+	}
+	return child
 }
 
 // generateShortID creates a short random hex ID for background tasks.

@@ -99,6 +99,10 @@ func formatToolActivity(toolName string, params map[string]any) string {
 		return fmt.Sprintf("%s()", toolName)
 	}
 
+	if paramKey == "file_path" || paramKey == "path" {
+		value = tool.ElidePath(value)
+	}
+
 	if len(value) > 60 {
 		value = value[:57] + "..."
 	}

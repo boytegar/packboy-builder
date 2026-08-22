@@ -524,7 +524,7 @@ func renderGenericToolResultInline(data ToolResultData) string {
 
 func renderHeader(meta toolresult.ResultMetadata, width int) string {
 	title := headerTitleStyle.Render(meta.Title)
-	subtitle := fmt.Sprintf("%s %s", meta.Icon, headerSubtitleStyle.Render(meta.Subtitle))
+	subtitle := fmt.Sprintf("%s %s", meta.Icon, headerSubtitleStyle.Render(tool.ElidePath(meta.Subtitle)))
 
 	metaParts := make([]string, 0, 6)
 	if meta.Size > 0 {
@@ -1058,7 +1058,7 @@ func extractToolArgs(input string) string {
 	}
 
 	if fp, ok := params["file_path"].(string); ok {
-		return fp
+		return tool.ElidePath(fp)
 	}
 	if c, ok := params["command"].(string); ok {
 		return c
@@ -1067,7 +1067,7 @@ func extractToolArgs(input string) string {
 		return p
 	}
 	if p, ok := params["path"].(string); ok {
-		return p
+		return tool.ElidePath(p)
 	}
 	if u, ok := params["url"].(string); ok {
 		return u

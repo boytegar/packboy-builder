@@ -16,7 +16,7 @@ Slash commands are typed directly in the TUI input box. They trigger local UI ac
 | `/plan` | Enter plan mode |
 | `/skills` | Manage skill states |
 | `/agents` | Manage agents |
-| `/tokenlimit` | View / set token budget |
+| `/tokenlimit` | Set input/output token budgets for main agent vs sub-agents (saved to global settings) |
 | `/compact` | Compress conversation history |
 | `/init` | Create AGENTS.md (or CLAUDE.md with `--claude`) and rules |
 | `/memory` | View / edit memory files |
@@ -148,7 +148,7 @@ tmux capture-pane -t t_cmds -p
 tmux send-keys -t t_cmds '/tokenlimit' Enter
 sleep 1
 tmux capture-pane -t t_cmds -p
-# Expected: current token usage and limit
+# Expected: token-limit selector (Main agent / Sub-agent / Sub-agent (write))
 
 # Test 7: /init — test in a fresh directory
 tmux send-keys -t t_cmds C-c

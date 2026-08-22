@@ -24,6 +24,14 @@ import (
 )
 
 // Data represents the complete Packboy Builder configuration.
+// TokenLimitOverride is a role-scoped context-window budget (input) plus the
+// output-token cap, set per target (main agent / sub-agent) via /tokenlimit and
+// persisted to the global settings.json.
+type TokenLimitOverride struct {
+	InputTokenLimit  int `json:"inputTokenLimit,omitempty"`
+	OutputTokenLimit int `json:"outputTokenLimit,omitempty"`
+}
+
 type Data struct {
 	Permissions    PermissionSettings `json:"permissions,omitempty"`
 	Model          string             `json:"model,omitempty"`
@@ -68,6 +76,21 @@ type Data struct {
 	// 0 (absent) means no override; the limit resolves from providers.json /
 	// the model cache / the env var as usual.
 	TokenLimit int `json:"tokenLimit,omitempty"`
+	// MainTokenLimit is the token budget for the main agent's window, in
+	// tokens, set via /tokenlimit. It overrides TokenLimit and the per-model
+	// tokenLimits in providers.json for the MAIN agent's context window:
+	// the main agent's auto-compaction trigger and the status bar's context
+	// percentage read it through llm.Store.EffectiveInputLimitFor(ScopeMain).
+	// Zero (absent) means no main-specific override; resolution falls through
+	// to TokenLimit and the usual chain.
+	MainTokenLimit TokenLimitOverride `json:"mainTokenLimit,omitempty"`
+	// AgentTokenLimit is the token budget for sub-agents' windows, in tokens,
+	// set via /tokenlimit. It overrides TokenLimit and the per-model
+	// tokenLimits in providers.json for SUBAGENT contexts: a subagent's
+	// auto-compaction trigger reads it through
+	// llm.Store.EffectiveInputLimitFor(ScopeAgent). Zero means no
+	// agent-specific override.
+	AgentTokenLimit TokenLimitOverride `json:"agentTokenLimit,omitempty"`
 	// Persona selects an active persona directory under ~/.pcb/personas/<name>/
 	// or .pcb/personas/<name>/. Empty = no persona override. The persona's own
 	// settings.json is applied as the highest config overlay (see
@@ -849,6 +872,8 @@ func (s *Data) Clone() *Data {
 	dst.Permissions.Ask = append([]string(nil), s.Permissions.Ask...)
 	dst.Model = s.Model
 	dst.TokenLimit = s.TokenLimit
+	dst.MainTokenLimit = s.MainTokenLimit
+	dst.AgentTokenLimit = s.AgentTokenLimit
 	dst.Theme = s.Theme
 	dst.SearchProvider = s.SearchProvider
 	dst.StreamFirstChunkTimeout = s.StreamFirstChunkTimeout

@@ -375,10 +375,9 @@ type AgentResult struct {
 const (
 	baseAgentDescription = "Subagent for research and implementation tasks."
 
-	// defaultMaxSteps is the default number of LLM inference steps.
-	// minMaxSteps prevents unusably short subagent runs.
-	defaultMaxSteps = 500
-	minMaxSteps     = 10
+	// minMaxSteps prevents unusably short subagent runs when an explicit
+	// step cap is requested via max_steps. 0 (unset) means unlimited.
+	minMaxSteps = 10
 )
 
 // modelAliases maps short model aliases to current-generation model ids.

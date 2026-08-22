@@ -87,6 +87,30 @@ func TestPrepareRunConfigHonorsLowerMaxSteps(t *testing.T) {
 	}
 }
 
+func TestPrepareRunConfigDefaultsToUnlimited(t *testing.T) {
+	executor := &Executor{parentModelID: "parent-model"}
+
+	rc, err := executor.prepareRunConfig(context.Background(), tool.AgentExecRequest{})
+	if err != nil {
+		t.Fatalf("prepareRunConfig() error: %v", err)
+	}
+	if rc.maxSteps != 0 {
+		t.Fatalf("expected unlimited (0) by default, got %d", rc.maxSteps)
+	}
+}
+
+func TestPrepareRunConfigClampsExplicitFloor(t *testing.T) {
+	executor := &Executor{parentModelID: "parent-model"}
+
+	rc, err := executor.prepareRunConfig(context.Background(), tool.AgentExecRequest{MaxSteps: 3})
+	if err != nil {
+		t.Fatalf("prepareRunConfig() error: %v", err)
+	}
+	if rc.maxSteps != minMaxSteps {
+		t.Fatalf("expected explicit floor clamp to %d, got %d", minMaxSteps, rc.maxSteps)
+	}
+}
+
 func TestResolveModelUsesConfigBeforeParent(t *testing.T) {
 	executor := &Executor{parentModelID: "parent-model"}
 	ctx := context.Background()
@@ -1094,7 +1118,7 @@ func TestPermissionModeFromOperationMode(t *testing.T) {
 	}
 }
 
-func TestUnnamedAgentUses500Steps(t *testing.T) {
+func TestUnnamedAgentUsesUnlimitedSteps(t *testing.T) {
 	config, ok := resolveAgentConfig("")
 	if !ok {
 		t.Fatal("unnamed agent config not found")
@@ -1102,8 +1126,8 @@ func TestUnnamedAgentUses500Steps(t *testing.T) {
 	if config.Name != "" {
 		t.Fatalf("unnamed agent name = %q, want empty", config.Name)
 	}
-	if config.MaxSteps != defaultMaxSteps {
-		t.Fatalf("unnamed agent max steps = %d, want %d", config.MaxSteps, defaultMaxSteps)
+	if config.MaxSteps != 0 {
+		t.Fatalf("unnamed agent max steps = %d, want 0 (unlimited)", config.MaxSteps)
 	}
 	if configs := NewRegistry().ListConfigs(); len(configs) != 0 {
 		t.Fatalf("registry should have no built-in agent definitions, got %+v", configs)

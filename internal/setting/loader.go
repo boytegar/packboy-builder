@@ -375,6 +375,29 @@ func UpdateSubagentModelAt(name, model string, userLevel bool) error {
 	})
 }
 
+// UpdateTokenLimitFor persists a role-scoped token-limit override to the
+// settings file at the requested level (true = user/global, false = project).
+// role is "main" or "agent". A zero input AND output clears the override for
+// that role. Mirrors the updateSettingsFile single-block write so other
+// settings in the file are left untouched.
+func UpdateTokenLimitFor(role string, tl TokenLimitOverride, userLevel bool) error {
+	return updateSettingsFile(userLevel, func(d *Data) {
+		if tl.InputTokenLimit <= 0 && tl.OutputTokenLimit <= 0 {
+			if role == "agent" {
+				d.AgentTokenLimit = TokenLimitOverride{}
+			} else {
+				d.MainTokenLimit = TokenLimitOverride{}
+			}
+			return
+		}
+		if role == "agent" {
+			d.AgentTokenLimit = tl
+		} else {
+			d.MainTokenLimit = tl
+		}
+	})
+}
+
 // AutoPilotPresetDir is the folder where /autopilot Export saves named configs
 // and Import reads them — a shared, non-session space for reusable presets.
 func AutoPilotPresetDir() string {

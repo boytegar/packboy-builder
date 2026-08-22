@@ -62,6 +62,11 @@ func (e *Executor) prepareRun(ctx context.Context, req tool.AgentExecRequest) (*
 		return nil, err
 	}
 
+	// Check recursion depth limit
+	if e.maxRecursionDepth > 0 && e.recursionDepth >= e.maxRecursionDepth {
+		return nil, fmt.Errorf("maximum agent recursion depth (%d) exceeded", e.maxRecursionDepth)
+	}
+
 	cfg, err := e.prepareRunConfig(ctx, req)
 	if err != nil {
 		return nil, err
@@ -90,11 +95,20 @@ func (e *Executor) logRunStart(run *preparedRun) {
 	)
 }
 
+// stepsLabel renders the step budget for the activity stream: "unlimited"
+// when uncapped, otherwise the numeric cap.
+func stepsLabel(maxSteps int) string {
+	if maxSteps > 0 {
+		return fmt.Sprintf("max %d", maxSteps)
+	}
+	return "unlimited"
+}
+
 func (e *Executor) executePreparedRun(ctx context.Context, run *preparedRun) (*core.Result, error) {
 	var onToolExec func(string, map[string]any)
 	if run.req.OnActivity != nil {
 		run.streamActivity(fmt.Sprintf("Model: %s", run.cfg.modelID))
-		run.streamActivity(fmt.Sprintf("Mode: %s · max %d steps", displayPermissionMode(run.cfg.permMode), run.cfg.maxSteps))
+		run.streamActivity(fmt.Sprintf("Mode: %s · steps %s", displayPermissionMode(run.cfg.permMode), stepsLabel(run.cfg.maxSteps)))
 		onToolExec = func(name string, params map[string]any) {
 			run.recordActivity(formatToolActivity(name, params))
 		}

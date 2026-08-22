@@ -235,6 +235,8 @@ func renderSubagentIdentity(b SubagentBrief) string {
 	// summary described *what was done* instead of *what was found*.
 	sb.WriteString("\nReporting: your final message is the only part of your work the parent agent sees. Return a concise, self-contained summary with the key findings, file:line references for anything the parent needs to edit, and concrete recommendations — not a list of actions you took. The parent should be able to act on the next turn from your summary alone.\n")
 	sb.WriteString("\nSearch discipline: prefer read-only code-intelligence tools the project exposes (LSP, MCP servers) when available, before scanning files. Fall back to Bash (rg, cat, sed -n) when those lack the answer. Stop searching as soon as you have enough evidence to answer the parent question. Do not read entire files when a targeted range suffices.\n")
+	sb.WriteString("\nAnalysis targets: the parent brief names the specific file path(s) to analyse. Start from those exact paths, then map the files related to each one (importers, implementations, tests, configs/templates that reference them) and report every relevant path as file:line.\n")
+	sb.WriteString("\nRepository context: if the repository has an AGENTS.md (or .agents/ docs), read it early to align with project conventions, boundaries, and commands before making changes or recommendations.\n")
 	if body := strings.TrimSpace(b.CustomPrompt); body != "" {
 		sb.WriteString("\n")
 		sb.WriteString(body)

@@ -147,20 +147,22 @@ func (t *HTTPTransport) Send(ctx context.Context, req *JSONRPCRequest) (*JSONRPC
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		return nil, fmt.Errorf("HTTP error %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Check Content-Type to determine response format
 	ct := resp.Header.Get("Content-Type")
 	if strings.HasPrefix(ct, "text/event-stream") {
+		// parseSSEResponse owns body lifecycle (spawns goroutine)
 		return t.parseSSEResponse(resp.Body, req.ID)
 	}
 
 	// Standard JSON response
+	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
@@ -175,12 +177,22 @@ func (t *HTTPTransport) Send(ctx context.Context, req *JSONRPCRequest) (*JSONRPC
 }
 
 // parseSSEResponse reads an SSE stream and returns the JSON-RPC response matching the request ID.
-func (t *HTTPTransport) parseSSEResponse(r io.Reader, requestID uint64) (*JSONRPCResponse, error) {
-	scanner := bufio.NewScanner(r)
+// Spawns goroutine to continue reading after response for remaining notifications.
+// Takes ownership of io.ReadCloser lifecycle.
+func (t *HTTPTransport) parseSSEResponse(body io.ReadCloser, requestID uint64) (*JSONRPCResponse, error) {
+	reader := bufio.NewReader(body)
 	var data string
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("reading SSE stream: %w", err)
+		}
+
+		line = strings.TrimRight(line, "\r\n")
 
 		if line == "" {
 			// Empty line = end of event, process accumulated data
@@ -188,10 +200,17 @@ func (t *HTTPTransport) parseSSEResponse(r io.Reader, requestID uint64) (*JSONRP
 				var resp JSONRPCResponse
 				if err := json.Unmarshal([]byte(data), &resp); err == nil {
 					if resp.ID == requestID {
+						// Found response - spawn goroutine to consume remaining stream
+						go t.consumeRemainingSSE(reader, body)
 						return &resp, nil
 					}
+					// Skip notification dispatch if valid response (has ID or Result/Error)
+					if resp.ID != 0 || resp.Result != nil || resp.Error != nil {
+						data = ""
+						continue
+					}
 				}
-				// Dispatch notifications
+				// Dispatch notifications only if not a response
 				t.mu.Lock()
 				handler := t.notifyHandler
 				t.mu.Unlock()
@@ -223,6 +242,51 @@ func (t *HTTPTransport) parseSSEResponse(r io.Reader, requestID uint64) (*JSONRP
 	}
 
 	return nil, fmt.Errorf("SSE stream ended without response for request %d", requestID)
+}
+
+// consumeRemainingSSE continues reading SSE stream for notifications after response returned.
+// Takes ownership of body, closes when done.
+func (t *HTTPTransport) consumeRemainingSSE(reader *bufio.Reader, body io.ReadCloser) {
+	defer body.Close()
+	var data string
+
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+
+		line = strings.TrimRight(line, "\r\n")
+
+		if line == "" {
+			if data != "" {
+				// Skip valid responses, dispatch only notifications
+				var resp JSONRPCResponse
+				if err := json.Unmarshal([]byte(data), &resp); err == nil {
+					if resp.ID != 0 || resp.Result != nil || resp.Error != nil {
+						data = ""
+						continue
+					}
+				}
+				t.mu.Lock()
+				handler := t.notifyHandler
+				t.mu.Unlock()
+				if handler != nil {
+					parseAndDispatchNotification([]byte(data), handler)
+				}
+			}
+			data = ""
+			continue
+		}
+
+		if after, found := strings.CutPrefix(line, "data:"); found {
+			if data == "" {
+				data = strings.TrimSpace(after)
+			} else {
+				data += "\n" + strings.TrimSpace(after)
+			}
+		}
+	}
 }
 
 // SendNotification sends a notification (no response expected)

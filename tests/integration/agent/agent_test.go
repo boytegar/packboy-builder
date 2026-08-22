@@ -88,7 +88,8 @@ func TestAgent_MaxStepsRespected(t *testing.T) {
 		t.TempDir(), "fake-model", nil,
 	)
 	result, err := executor.Run(context.Background(), tool.AgentExecRequest{
-		Prompt: "keep going",
+		Prompt:   "keep going",
+		MaxSteps: 5,
 	})
 	if err != nil {
 		t.Fatalf("Run() error: %v", err)
@@ -97,8 +98,9 @@ func TestAgent_MaxStepsRespected(t *testing.T) {
 	if result.Success {
 		t.Error("expected failure (max steps)")
 	}
-	if !strings.Contains(result.Error, "500") {
-		t.Errorf("expected error message about 500 max steps, got %q", result.Error)
+	// 5 is below the min floor, so it is clamped up to minMaxSteps (10).
+	if !strings.Contains(result.Error, "10") {
+		t.Errorf("expected error message about 10 max steps (clamped floor), got %q", result.Error)
 	}
 }
 
@@ -357,7 +359,7 @@ func TestAgent_OnActivityReceivesToolUpdates(t *testing.T) {
 	// The UI stream carries everything: telemetry and the tool trace.
 	for _, want := range []string{
 		"Model: fake-model",
-		"Mode: Explore · max 500 steps",
+		"Mode: Explore · steps unlimited",
 		"Thinking...",
 		"Read(README.md)",
 		"Usage: input=30 output=8",

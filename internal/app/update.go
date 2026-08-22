@@ -14,6 +14,9 @@
 package app
 
 import (
+	"fmt"
+	"time"
+
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"go.uber.org/zap"
@@ -78,6 +81,7 @@ func (m *model) overlayPanels() []overlayPanel {
 		&m.userInput.Config,
 		&m.userInput.Autopilot,
 		&m.userInput.Evolve,
+		&m.userInput.TokenLimit,
 	}
 }
 
@@ -160,6 +164,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			log.Logger().Warn("reload settings after tool toggle failed", zap.Error(err))
 		}
 		return m, nil
+	case input.TokenLimitSavedMsg:
+		// The /tokenlimit overlay persisted a role-scoped budget to the global
+		// settings.json. Reload the live settings handle so the runtime resolver
+		// (compaction + status bar) picks it up; the running agent reads the
+		// window on its next step, so a saved budget applies without a rebuild.
+		if err := m.services.Setting.Reload(m.env.CWD); err != nil {
+			log.Logger().Warn("reload settings after token limit save failed", zap.Error(err))
+		}
+		status := "Token limits saved: " + msg.Target
+		if msg.Input > 0 || msg.Output > 0 {
+			status = fmt.Sprintf("%s — in %s · out %s",
+				status, kit.FormatTokenCount(msg.Input), kit.FormatTokenCount(msg.Output))
+		} else {
+			status += " (cleared)"
+		}
+		token := m.userInput.Provider.SetStatusMessage(status)
+		return m, kit.StatusTimer(4*time.Second, token)
 	case input.MissionRefinedMsg:
 		// The /autopilot Mission editor's refined text arrived; hand it to the
 		// panel to replace the draft (or surface an error under the editor).
@@ -305,20 +326,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case flushResultMsg:
 		return m, m.handleFlushResult(msg)
-	case scrollbackPrintReadyMsg:
-		// Bubble Tea's renderer barrier flushes the latest managed View before
-		// insertAbove. Sequence ensures completion is observed only after this
-		// chunk has been inserted.
-		content, ok := m.prepareScrollbackPrint(msg.id)
-		if !ok {
+	case scrollMsg:
+		if m.chat != nil && m.chat.onScroll(msg.delta) {
 			return m, nil
 		}
-		return m, tea.Sequence(
-			tea.Println(content),
-			func() tea.Msg { return scrollbackPrintDoneMsg{id: msg.id} },
-		)
-	case scrollbackPrintDoneMsg:
-		return m, m.finishScrollbackPrint(msg.id)
+		return m, nil
+	case followMsg:
+		if m.chat != nil && !m.chat.follow {
+			m.chat.follow = true
+			m.chat.buf.GotoBottom()
+		}
+		return m, nil
 	case conv.QuestionResponseMsg:
 		return m, m.handleQuestionResponse(msg)
 	case input.SecretPromptResponseMsg:
@@ -381,7 +399,6 @@ func (m *model) routeToSubModel(msg tea.Msg) (tea.Cmd, bool) {
 func (m *model) needsSpinner() bool {
 	return m.conv.Stream.Active ||
 		m.conv.Compact.Active ||
-		m.userInput.Provider.FetchingLimits ||
 		m.conv.AnalyzingImages ||
 		m.hasRunningBackgroundTask()
 }

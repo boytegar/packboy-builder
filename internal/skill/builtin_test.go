@@ -47,6 +47,46 @@ func TestBuiltinGraphSkillLoads(t *testing.T) {
 	}
 }
 
+func TestBuiltinSpecSkillLoads(t *testing.T) {
+	root, err := materializeBuiltinSkills()
+	if err != nil {
+		t.Fatalf("materializeBuiltinSkills: %v", err)
+	}
+	if root == "" {
+		t.Fatal("expected non-empty materialize root")
+	}
+
+	loader := newLoader(t.TempDir())
+	skills, err := loader.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll: %v", err)
+	}
+
+	sk, ok := skills["spec"]
+	if !ok {
+		t.Fatal("builtin spec skill missing from loadAll")
+	}
+	if sk.Scope != ScopeBuiltin {
+		t.Fatalf("Scope = %s, want builtin", sk.Scope)
+	}
+	if sk.Name != "spec" {
+		t.Fatalf("Name = %q, want spec", sk.Name)
+	}
+	if sk.ArgumentHint == "" {
+		t.Fatal("ArgumentHint should be set for /spec usage")
+	}
+	if len(sk.References) == 0 {
+		t.Fatal("spec skill should ship reference files")
+	}
+
+	body := sk.GetInstructions()
+	for _, want := range []string{"Spec Generation", "Phase 1", "Phase 2", "context/"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("instructions missing %q (len=%d)", want, len(body))
+		}
+	}
+}
+
 func TestProjectSkillShadowsBuiltin(t *testing.T) {
 	tmp := t.TempDir()
 	skillDir := tmp + "/.pcb/skills/graph"

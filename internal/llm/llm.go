@@ -29,6 +29,7 @@ type Client struct {
 	model          string
 	maxTokens      int
 	thinkingEffort string
+	role           TokenRole
 	tokens         Usage
 
 	// Token limits resolve from the provider's ListModels, which is a live
@@ -76,6 +77,13 @@ func (c *cachedLimit) reset() {
 // or fall back to defaultMaxTokens.
 func NewClient(p Provider, model string, maxTokens int) *Client {
 	return &Client{provider: p, model: model, maxTokens: maxTokens}
+}
+
+// NewClientWithRole is NewClient plus the agent role the client serves
+// (TokenRoleMain or TokenRoleAgent). The role selects which /tokenlimit
+// override the client resolves its context window and output cap from.
+func NewClientWithRole(p Provider, model string, maxTokens int, role TokenRole) *Client {
+	return &Client{provider: p, model: model, maxTokens: maxTokens, role: role}
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +326,7 @@ func (l *Client) InputLimit() int {
 	}
 	store := Default().Store()
 	auth := store.ConnectionAuthMethod(provider)
-	if n := store.EffectiveInputLimit(provider, auth, model); n > 0 {
+	if n := store.EffectiveInputLimitFor(l.role, provider, auth, model); n > 0 {
 		return n
 	}
 	return l.inLimit.get(p, model, inputLimitFromProvider)
@@ -344,10 +352,14 @@ func (l *Client) effectiveMaxTokens() int {
 	p := l.provider
 	model := l.model
 	mt := l.maxTokens
+	role := l.role
 	l.mu.RUnlock()
 
 	if mt > 0 {
 		return mt
+	}
+	if o := roleOutputOverride(role); o > 0 {
+		return o
 	}
 	if limit := l.outLimit.get(p, model, outputLimitFromProvider); limit > 0 {
 		return limit

@@ -4,12 +4,15 @@ import (
 	"fmt"
 
 	"github.com/boytegar/packboy-builder/internal/llm"
+	"github.com/boytegar/packboy-builder/internal/setting"
 )
 
-// TokenLimitResultMsg is sent when a token limit fetch completes.
-type TokenLimitResultMsg struct {
-	Result string
-	Err    error
+// TokenLimitSavedMsg is emitted when the /tokenlimit overlay persists a
+// role-scoped budget. The app shows it as a transcript notice.
+type TokenLimitSavedMsg struct {
+	Target string
+	Input  int
+	Output int
 }
 
 // FormatTokenCount formats a token count for display.
@@ -24,8 +27,15 @@ func FormatTokenCount(count int) string {
 	}
 }
 
-// GetMaxTokens returns the effective output limit, falling back to defaultMaxTokens.
+// GetMaxTokens returns the effective output limit for the main agent's client.
+// The settings.json mainTokenLimit.outputTokenLimit override wins first (set via
+// /tokenlimit), mirroring how llm.Store.EffectiveInputLimitFor prioritizes the
+// role-scoped input budget; otherwise it falls back to the provider's configured
+// / cached output cap, then defaultMaxTokens.
 func GetMaxTokens(store *llm.Store, currentModel *llm.CurrentModelInfo, defaultMaxTokens int) int {
+	if o := setting.Default().MainTokenLimit().OutputTokenLimit; o > 0 {
+		return o
+	}
 	if limit := getEffectiveOutputLimit(store, currentModel); limit > 0 {
 		return limit
 	}
@@ -89,4 +99,17 @@ func GetEffectiveInputLimit(store *llm.Store, currentModel *llm.CurrentModelInfo
 	}
 	auth := store.ResolveAuthMethod(currentModel)
 	return store.EffectiveInputLimit(currentModel.Provider, auth, currentModel.ModelID)
+}
+
+// GetEffectiveInputLimitFor resolves the context window for a specific role
+// (main agent / subagent), honoring that role's settings.json /tokenlimit budget
+// first via llm.Store.EffectiveInputLimitFor. The status bar's context
+// percentage must use Main so it never disagrees with the main agent's
+// auto-compaction trigger (llm.Client.InputLimit → EffectiveInputLimitFor).
+func GetEffectiveInputLimitFor(role llm.TokenRole, store *llm.Store, currentModel *llm.CurrentModelInfo) int {
+	if store == nil || currentModel == nil {
+		return 0
+	}
+	auth := store.ResolveAuthMethod(currentModel)
+	return store.EffectiveInputLimitFor(role, currentModel.Provider, auth, currentModel.ModelID)
 }

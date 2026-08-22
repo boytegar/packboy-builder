@@ -48,6 +48,7 @@ type adaptConfig struct {
 	activityFn      func(toolCallID string, msg string)
 	promptResponder BashPromptResponderProvider
 	skillTracker    SkillLoadTracker
+	agentExecutor   AgentExecutor
 }
 
 // WithAskUser sets the handler the AskUserQuestion tool uses to ask the user.
@@ -76,6 +77,11 @@ func WithSkillLoadTrackerProvider(tracker SkillLoadTracker) AdaptOption {
 	return func(c *adaptConfig) { c.skillTracker = tracker }
 }
 
+// WithAgentExecutor sets the executor for recursive Agent tool calls
+func WithAgentExecutor(executor AgentExecutor) AdaptOption {
+	return func(c *adaptConfig) { c.agentExecutor = executor }
+}
+
 // AdaptTool wraps a legacy Tool as a core.Tool with a dynamic CWD resolver.
 func AdaptTool(t Tool, schema core.ToolSchema, cwd func() string) core.Tool {
 	return &toolAdapter{inner: t, schema: schema, cwd: cwd}
@@ -102,6 +108,16 @@ func AdaptToolRegistry(schemas []core.ToolSchema, cwd func() string, opts ...Ada
 			adapted = append(adapted, &toolAdapter{inner: t, schema: schema, cwd: cwd, askFn: cfg.askFn, messagesGetter: cfg.messagesGetter, activityFn: cfg.activityFn, promptResponder: cfg.promptResponder, skillTracker: cfg.skillTracker})
 		}
 	}
+	
+	// Inject Agent tool if executor provided
+	if cfg.agentExecutor != nil {
+		if agentTool, ok := Get("Agent"); ok {
+			if agentSchema, ok := schemaByName["Agent"]; ok {
+				adapted = append(adapted, &toolAdapter{inner: agentTool, schema: agentSchema, cwd: cwd, askFn: cfg.askFn, messagesGetter: cfg.messagesGetter, activityFn: cfg.activityFn, promptResponder: cfg.promptResponder, skillTracker: cfg.skillTracker})
+			}
+		}
+	}
+	
 	return core.NewTools(adapted...)
 }
 

@@ -12,7 +12,7 @@ func init() {
 	agentRunCmd.Flags().StringVar(&agentRunOpts.Name, "name", "", "Optional agent name")
 	agentRunCmd.Flags().StringVar(&agentRunOpts.Prompt, "prompt", "", "Task prompt")
 	agentRunCmd.Flags().StringVar(&agentRunOpts.Model, "model", "", "Model override")
-	agentRunCmd.Flags().IntVar(&agentRunOpts.MaxSteps, "max-steps", 100, "Maximum LLM inference steps")
+	agentRunCmd.Flags().IntVar(&agentRunOpts.MaxSteps, "max-steps", 0, "Maximum LLM inference steps (0 = unlimited)")
 
 	agentCmd.AddCommand(agentRunCmd)
 	rootCmd.AddCommand(agentCmd)

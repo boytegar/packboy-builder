@@ -22,7 +22,7 @@ type agent struct {
 	compactFunc       func(ctx context.Context, msgs []Message) (string, error)
 	llm               LLM
 	cwd               string
-	maxSteps          int
+	maxSteps          atomic.Int64
 	maxOutputRecovery int
 	maxTurnRetries    int
 	firstChunkTimeout time.Duration
@@ -90,6 +90,18 @@ func (a *agent) Tools() Tools          { return a.tools }
 func (a *agent) Inbox() chan<- Message { return a.inbox }
 func (a *agent) Outbox() <-chan Event  { return a.outbox }
 func (a *agent) Messages() []Message   { return a.snapshot() }
+
+// SetMaxSteps adjusts the per-turn step cap at runtime. 0 = unlimited.
+// Read at the top of every ThinkAct iteration → next step picks up the new
+// value without interrupting the in-flight turn. Safe for concurrent callers.
+func (a *agent) SetMaxSteps(maxSteps int) {
+	a.maxSteps.Store(int64(maxSteps))
+}
+
+// MaxSteps returns the current step cap, or 0 for unlimited.
+func (a *agent) MaxSteps() int {
+	return int(a.maxSteps.Load())
+}
 
 func (a *agent) SetMessages(msgs []Message) {
 	a.mu.Lock()
@@ -353,7 +365,7 @@ func (a *agent) ThinkAct(ctx context.Context) (*Result, error) {
 		// Max steps guard. The cap itself is reported through StopReason —
 		// interpretStopReason turns it into "reached maximum steps (N)" — so
 		// Content stays the model's own last output rather than a status string.
-		if a.maxSteps > 0 && steps >= a.maxSteps {
+		if maxSteps := a.maxSteps.Load(); maxSteps > 0 && int64(steps) >= maxSteps {
 			return makeResult(StopMaxSteps), nil
 		}
 

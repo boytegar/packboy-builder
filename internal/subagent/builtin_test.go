@@ -43,8 +43,8 @@ func TestBuiltinResearcherIsExploreMode(t *testing.T) {
 	if config.PermissionMode != PermissionExplore {
 		t.Errorf("researcher mode = %q, want %q", config.PermissionMode, PermissionExplore)
 	}
-	if config.MaxSteps != 100 {
-		t.Errorf("researcher max-steps = %d, want 100", config.MaxSteps)
+	if config.MaxSteps != 0 {
+		t.Errorf("researcher max-steps = %d, want 0 (unlimited)", config.MaxSteps)
 	}
 	if config.Model != "inherit" {
 		t.Errorf("researcher model = %q, want inherit", config.Model)

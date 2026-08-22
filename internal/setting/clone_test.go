@@ -218,6 +218,28 @@ func TestMergeSettingsCoalescesTokenLimit(t *testing.T) {
 	}
 }
 
+// CoalesceTokenLimit merges role-scoped overrides field-by-field: a partial
+// overlay (only input, or only output) still falls through to the base for the
+// unset half, like the scalar coalesceInt but per field.
+func TestMergeSettingsCoalescesRoleTokenLimit(t *testing.T) {
+	base := &Data{MainTokenLimit: TokenLimitOverride{InputTokenLimit: 120000, OutputTokenLimit: 6000}}
+	overlay := &Data{MainTokenLimit: TokenLimitOverride{InputTokenLimit: 90000}}
+
+	got := mergeSettings(base, overlay)
+	if got.MainTokenLimit.InputTokenLimit != 90000 {
+		t.Errorf("overlay input wins: got %d, want 90000", got.MainTokenLimit.InputTokenLimit)
+	}
+	if got.MainTokenLimit.OutputTokenLimit != 6000 {
+		t.Errorf("base output survives partial overlay: got %d, want 6000", got.MainTokenLimit.OutputTokenLimit)
+	}
+
+	// Fully-unset overlay must not wipe the base.
+	got = mergeSettings(base, &Data{})
+	if got.MainTokenLimit != base.MainTokenLimit {
+		t.Errorf("empty overlay must preserve base MainTokenLimit: got %+v", got.MainTokenLimit)
+	}
+}
+
 // TestMergeSettingsDedupesSkillDirs guards the additive merge of the
 // settings.json "skillDirs" list: user-level and project-level entries union
 // (deduplicated, order-preserved), so a project can extend but not remove a

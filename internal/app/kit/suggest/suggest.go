@@ -130,7 +130,7 @@ func (s *State) UpdateSuggestions(input string) {
 const (
 	fileScanMaxResults        = 2000
 	fileScanMaxDirsVisited    = 8000
-	fileScanMaxDepth          = 6
+	fileScanMaxDepth          = 20
 	fileSuggestionViewSize    = 8
 	commandSuggestionViewSize = 8
 )
@@ -171,7 +171,7 @@ func (s *State) scanAllFiles() []fileSuggestion {
 	queue := []queueItem{{s.cwd, 0}}
 	dirsVisited := 0
 
-	// Load gitignore patterns for filtering
+	// Load gitignore patterns - we'll show them but mark as ignored
 	gi := loadGitignore(s.cwd)
 
 	for len(queue) > 0 && len(results) < fileScanMaxResults && dirsVisited < fileScanMaxDirsVisited {
@@ -196,38 +196,42 @@ func (s *State) scanAllFiles() []fileSuggestion {
 			name := entry.Name()
 			fullPath := filepath.Join(item.dir, name)
 
-			// Check gitignore before adding directories or files
 			relPath, err := filepath.Rel(s.cwd, fullPath)
-			if err == nil && gi != nil && gi.Matches(relPath, entry.IsDir()) {
-				// If this is a directory that's gitignored, skip it entirely
-				if entry.IsDir() {
-					// Still descend into .pcb directory even if gitignored
-					if name != ".pcb" {
-						continue
-					}
-				} else {
-					continue
-				}
-			}
-
-			if entry.IsDir() {
-				if !shouldSkipDirectory(name) && item.depth < fileScanMaxDepth {
-					queue = append(queue, queueItem{fullPath, item.depth + 1})
-				}
-				continue
-			}
-
-			relPath, err = filepath.Rel(s.cwd, fullPath)
 			if err != nil || seen[relPath] {
 				continue
 			}
-			seen[relPath] = true
 
-			results = append(results, fileSuggestion{
-				Path:        relPath,
-				DisplayName: relPath,
-				IsDir:       false,
-			})
+			// Skip system directories but don't skip based on gitignore
+			if entry.IsDir() {
+				if !shouldSkipDirectory(name) && item.depth < fileScanMaxDepth {
+					queue = append(queue, queueItem{fullPath, item.depth + 1})
+					// Add directory to results
+					if !seen[relPath] {
+						seen[relPath] = true
+						results = append(results, fileSuggestion{
+							Path:        relPath,
+							DisplayName: relPath + "/",
+							IsDir:       true,
+						})
+					}
+				}
+				continue
+			}
+
+			// Add files (including gitignored ones)
+			if !seen[relPath] {
+				seen[relPath] = true
+				displayName := relPath
+				// Mark gitignored files
+				if gi != nil && gi.Matches(relPath, false) {
+					displayName = relPath + " (ignored)"
+				}
+				results = append(results, fileSuggestion{
+					Path:        relPath,
+					DisplayName: displayName,
+					IsDir:       false,
+				})
+			}
 		}
 	}
 
