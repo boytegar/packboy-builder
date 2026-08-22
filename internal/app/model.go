@@ -56,6 +56,7 @@ type model struct {
 	conv            conv.Model           // Agent Outbox: conversation + output rendering
 	env             env                  // Shared app state: provider, session, permission, plan, config
 	services        services             // Domain service singletons, injected at construction
+	chat            *chatView            // alt-screen chat viewport + render cache (see model_viewport.go)
 	learnedStores   *learnedStoreContext // live cwd/settings source for /evolve inventories
 
 	// welcomePending marks the startup splash as not yet frozen into scrollback.

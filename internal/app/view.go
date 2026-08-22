@@ -29,12 +29,23 @@ var ghostTextStyle = lipgloss.NewStyle().Foreground(kit.CurrentTheme.TextDim)
 // source the key router uses — so the panel that owns the keyboard is always
 // the one drawn on screen.
 func (m *model) View() tea.View {
-	if frame, ok := m.scrollbackFrameForPrint(); ok {
-		return frame
-	}
 	content, cursor := m.viewString()
 	v := tea.NewView(content)
 	v.Cursor = cursor
+	v.AltScreen = true                    // full-window chat: the viewport owns the screen
+	v.MouseMode = tea.MouseModeCellMotion // wheel + click reports route to the model
+	v.OnMouse = func(msg tea.MouseMsg) tea.Cmd {
+		// Wheel events never touch model state here — they package the delta
+		// and hand it to the Update loop (scrollMsg), which owns all scroll
+		// state.
+		switch msg.Mouse().Button {
+		case tea.MouseWheelUp:
+			return func() tea.Msg { return scrollMsg{delta: scrollStep} }
+		case tea.MouseWheelDown:
+			return func() tea.Msg { return scrollMsg{delta: -scrollStep} }
+		}
+		return nil
+	}
 	return v
 }
 
@@ -92,42 +103,27 @@ func isDockedModal(ov overlayPanel) bool {
 // full terminal height would push native scrollback (committed thinking /
 // content) far above the input and leave a large blank band between them.
 func (m *model) renderNormalView(separator, trackerView string) (string, *tea.Cursor) {
-	// Render the footer first so we can measure how many lines it consumes
-	// and cap the chat section to the remaining terminal height.
 	footer, inputRow := m.renderFooter(separator)
-	// A non-positive result means the footer already fills the screen; tailLines
-	// reads that as "no room" and drops the chat section entirely.
-	maxContentHeight := m.env.Height - strings.Count(footer, "\n")
+	chatHeight := m.env.Height - strings.Count(footer, "\n")
+	if chatHeight < 0 {
+		chatHeight = 0
+	}
+
+	// Assemble the live tail (renderChatSection) and the chat viewport.
+	// The viewport slices the cached committed blocks + this live tail, so
+	// this join is the only full-content pass per frame.
+	if m.chat == nil {
+		m.chat = chatViewer(m.env.Width, chatHeight) // first render
+	} else {
+		m.chat.syncSizeIfNeeded(m.env.Width, chatHeight)
+	}
 
 	activeContent := conv.RenderActiveContent(m.messageRenderParams())
-	chatSection := tailLines(m.renderChatSection(activeContent, trackerView), maxContentHeight)
+	live := m.renderChatSection(activeContent, trackerView)
+	chatSection := m.chat.view(live)
 
-	view := chatSection + footer
-	// While the startup banner is still live (not yet frozen into scrollback),
-	// pad the managed frame to the full terminal height. A full-height managed
-	// frame keeps the entire screen owned by the inline renderer, so a
-	// terminal shrink can't reflow the live banner into native history (which
-	// would duplicate it). This padding is only needed pre-commit — once the
-	// banner is frozen (welcomePending=false) the frame shrinks so committed
-	// scrollback sits directly above the input without a blank gap.
-	padding := 0
-	if m.welcomePending {
-		padding = m.env.Height - (strings.Count(view, "\n") + 1)
-		if padding < 0 {
-			padding = 0
-		}
-	}
-	if padding > 0 {
-		view = strings.Repeat("\n", padding) + view
-		inputRow += padding
-	}
-
-	return view, m.inputCursor(strings.Count(chatSection, "\n") + inputRow)
+	return chatSection + footer, m.inputCursor(strings.Count(chatSection, "\n") + inputRow)
 }
-
-// inputCursor returns where the terminal cursor belongs inside the composer.
-// baseRow is the frame row the textarea's first line lands on; the textarea
-// reports its cursor relative to that, and the prompt shifts it right.
 func (m *model) inputCursor(baseRow int) *tea.Cursor {
 	cursor := m.userInput.Textarea.Cursor()
 	if cursor == nil { // textarea is blurred
@@ -169,6 +165,13 @@ func (m *model) renderFooter(separator string) (string, int) {
 	if queuePreview := m.renderQueuePreview(); queuePreview != "" {
 		b.WriteString("\n")
 		b.WriteString(queuePreview)
+	}
+	// When the chat is scrolled back from the bottom, a hint on its own row
+	// above the separator invites the user back to live (End). Own row so it
+	// never clips viewport content.
+	if m.chat != nil && m.chat.scrolledUp() {
+		b.WriteString("\n")
+		b.WriteString(conv.ScrollBannerStyle.Render("▼ End to return to latest"))
 	}
 	b.WriteString("\n")
 	b.WriteString(separator)

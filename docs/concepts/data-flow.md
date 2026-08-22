@@ -30,8 +30,11 @@ lets the caller try the next layer. `(nil, false)` is the common
 "not for me" return.
 
 Input sources land as `tea.Msg`. **`SubmitToAgent`** is the single exit
-to the running agent. Rendering happens via `tea.Println` (terminal
-scrollback) plus `View()` (bottom UI strip).
+to the running agent. Rendering happens entirely inside `View()`: the
+alt-screen chat viewport (`View().AltScreen = true`) draws all
+conversation content in one scrollable pane above a pinned input strip.
+Messages the agent finishes are appended to the viewport's render cache;
+nothing is written to the terminal's native scrollback.
 
 ```
    ┌──────────────────────────────────────────────────────────────┐
@@ -66,10 +69,10 @@ scrollback) plus `View()` (bottom UI strip).
    │                  Update → conv.Update → callbacks            │
    │                      │                                       │
    │                      ▼                                       │
-   │             CommitMessages → tea.Println → scrollback        │
+   │             CommitMessages → appendBlock → viewport cache         │
    │                      │                                       │
    │                      ▼                                       │
-   │                   View() → bottom UI strip                   │
+   │                   View() → full-window chat viewport         │
    └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -204,7 +207,7 @@ handleSubmit → dispatchSubmission
               │
               ▼
    c.env.Conversation.AddNotice(result)    "conversation cleared"
-   c.env.CommitMessages()                  → tea.Println to scrollback
+   c.env.CommitMessages()                  → appendBlock to viewport cache
 ```
 
 A slash command's handler reads live state via `env.*` (services),
@@ -331,7 +334,7 @@ actually responds. The "payload" varies by producer:
 ```
 each inject*
    ├─ conv.AddNotice(...)                          ◄── "Scheduled task fired", etc.
-   ├─ conv.Append(ChatMessage{Role: user, ...})    ◄── shows in scrollback
+   ├─ conv.Append(ChatMessage{Role: user, ...})    ◄── shows in chat viewport
    └─ SubmitToAgent(<payload>, nil)                ◄── kicks off the next turn
 ```
 
@@ -459,7 +462,7 @@ Update → routeToSubModel                update.go
        ├─ m.AppendToLast(text)          grow the in-progress message
        └─ if chunk.Done && no tools:
               Stream.Active = false
-              rt.CommitMessages()       promote to scrollback (see below)
+              rt.CommitMessages()       promote to viewport cache (see below)
         │
         ▼
    PostInfer                            applyPostInfer
@@ -485,73 +488,60 @@ Update → routeToSubModel                update.go
 
 ### Where the user sees streaming text
 
-The terminal window has two distinct surfaces during a session:
+The full window is the alt-screen chat viewport, split into a scrollable
+conversation pane (top) and a pinned footer (input + status). Nothing
+is written to the terminal's native scrollback.
 
 ```
-   terminal native scrollback                  Bubble Tea repaint zone
-   (text you can scroll up to                  (the bottom N lines
-    review; never repainted —                   redrawn every Update;
-    written line-by-line via                    contents discarded
-    tea.Println)                                between repaints)
+   chat viewport (one pane)
+   (content grows, scrolls in place — wheel / PgUp / PgDn)
+        ▼
+   ─── bottom-pinned footer ─────────────────
+     ❯ type your message...   (textarea, status line)
 ```
-
-Same window, but written by two different mechanisms. Bubble Tea owns
-the bottom N lines; everything above is regular terminal output it
-emitted with `tea.Println`.
 
 **While a message is streaming** the in-progress text lives in the
-repaint zone, not the scrollback. Each OnChunk grows the assistant
-message in `m.conv.Messages`; View() rebuilds the repaint zone every
-Update so the user sees it advance token-by-token:
+live tail — the not-yet-committed slice at the end of the viewport
+content. Each OnChunk grows the assistant message in
+`m.conv.Messages`; View() re-renders the tail every Update:
 
 ```
-   ─── terminal scrollback (frozen) ──────────────────
-     user: write a poem about the sea               ← committed
-   ─── Bubble Tea repaint zone (repainted) ──────────
+   ─── chat viewport ──────────────────────────
+     user: write a poem about the sea         ← committed (render cache)
      assistant: Whispers of waves on ancient
-                stone, the tides▮                   ← in conv.Messages,
-                                                      Stream.Active=true,
-                                                      NOT yet committed
-     ─────────────────────────────────────────────
+                stone, the tides▮             ← live tail,
+                                                Stream.Active=true,
+                                                NOT yet committed
+     ─────────────────────────────────────────
      ❯ (textarea waits, disabled mid-stream)
 ```
 
-**When the stream finishes** (last OnChunk with `Done=true` and no tool
-calls), `CommitMessages` calls `tea.Println` for the completed message.
-That **lifts** the message out of the repaint zone and into the
-scrollback above:
+**When a block completes** the off-thread flush renders it and
+`handleFlushResult` appends it to the committed render cache
+(`chatView.appendBlock`), advancing the message's commit offsets. The
+live tail shrinks by that block; follow mode keeps the view pinned to
+the bottom, so the completed block appears to scroll into place. The
+full message (or a paragraph-sized chunk of it) lands in the cache
+exactly once:
 
 ```
-   ─── terminal scrollback (frozen) ──────────────────
-     user: write a poem about the sea
-     assistant: Whispers of waves on ancient
-                stone, the tides retreat and        ← now committed,
-                return, ...                            written once via
-                                                       tea.Println
-   ─── Bubble Tea repaint zone (repainted) ──────────
-     (empty — CommittedCount caught up with len(Messages))
-     ─────────────────────────────────────────────
+   ─── chat viewport ─────────────────────────────
+     user: who wrote a poem about the sea
+     assistant: Whispers of wind, ancient
+       stone, the tides retreat, and            ← now committed (cache)
+       return, ...
+     ─────────────────────────────────────
      ❯ type your message...
 ```
 
-The rule preventing the message from appearing in both places at once
-is in `renderAndCommit(checkReady=true)`: it never commits the last
-message while `Stream.Active == true`. So during streaming the message
-is only in the repaint zone; once the stream finishes, exactly one
-`tea.Println` moves it to scrollback and `CommittedCount` advances so
-the repaint zone no longer redraws it.
-
-There is also a renderer-level ordering rule at this boundary. Bubble Tea
-normally queues the latest `View()` and flushes it on a frame ticker, while
-`tea.Println` inserts into scrollback immediately. Packboy Builder's local Bubble Tea patch
-flushes the queued managed frame synchronously before `insertAbove` calculates
-its scroll geometry. Without that barrier, `CommittedCount` can hide content
-in the logical view before the shorter frame reaches the terminal, allowing
-rows from the previous live frame to become permanently embedded in native
-scrollback. The replacement in `go.mod` is pinned to
-[`yanmxa/bubbletea@81ba608`](https://github.com/yanmxa/bubbletea/commit/81ba608a2d90bacdc115d6b3acc6b1c12cb44e5d);
-remove it once [upstream issue #1736](https://github.com/charmbracelet/bubbletea/issues/1736)
-ships an equivalent barrier.
+The rule preventing the message from appearing twice (live tail AND
+cache) is in `renderAndCommit(checkReady=true)`: it never commits the
+last message while `Stream.Active == true`. So during streaming the
+message is only in the live tail; once the stream finishes, exactly one
+append moves it to the cache and `CommittedCount` advances so the live
+tail no longer redraws it. Committed blocks are cached as pre-rendered
+ANSI strings — the viewport never re-parses them, so scrolling long
+conversations stays cheap.
 
 Tool-call spinners live in the repaint zone the same way: they appear
 while a tool is running and disappear once the result lands.
@@ -666,7 +656,7 @@ prompt cache behaviour).
 | Slash command env builder | [`internal/app/update_command.go`](../../internal/app/update_command.go) |
 | Inject paths (cron/hook/hub) | [`internal/app/model_turn_queue.go`](../../internal/app/model_turn_queue.go) |
 | Agent event callbacks | [`internal/app/model_agent_events.go`](../../internal/app/model_agent_events.go) |
-| Scrollback commit | [`internal/app/model_scrollback.go`](../../internal/app/model_scrollback.go) |
+| Commit pipeline (viewport cache append) | [`internal/app/model_scrollback.go`](../../internal/app/model_scrollback.go) |
 | Conv event router | [`internal/app/conv/update.go`](../../internal/app/conv/update.go) |
 | `agent.Send` / outbox poll | [`internal/app/agent.go`](../../internal/app/agent.go) |
 | Cancel mid-stream | [`internal/app/update_input_effects.go`](../../internal/app/update_input_effects.go) |

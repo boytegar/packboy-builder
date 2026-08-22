@@ -82,58 +82,61 @@ func ContentWidth(s string) int {
 	return max
 }
 
-// JoinColumns wraps exactly 4 pre-rendered columns side-by-side with equal
-// width (25% each) and fixed height. Returns plain text without lipgloss wrapping.
-// JoinColumns wraps exactly 4 pre-rendered columns side-by-side with equal
-// width (25% each) and fixed height. Returns plain text without lipgloss wrapping.
+// JoinColumns wraps N pre-rendered columns side-by-side with equal width
+// (100/N% each) and fixed height. Returns plain text without lipgloss wrapping.
 func JoinColumns(columns []string, width int) string {
-	// Always expect exactly 4 columns (LSPs, Skills, MCPs, Agents)
-	if len(columns) != 4 {
+	// Always expect 2+ non-empty columns (LSPs, Skills, MCPs).
+	if len(columns) < 2 {
 		return ""
 	}
-	
-	// Each column gets exactly 25% of total viewport
-	colWidth := width / 4
+	n := len(columns)
+
+	// Each column gets an equal share of the total viewport.
+	colWidth := width / n
 	if colWidth < 14 {
 		colWidth = 14
 	}
-	
-	// Fixed height: title + 10 rows = 11 lines total
+
+	// Fixed height: title + 10 rows = 11 lines total.
 	const fixedHeight = 11
-	
-	// Process all 4 columns with fixed height padding and exact width truncation
-	cols := make([][]string, 4)
-	for i := 0; i < 4; i++ {
+
+	// Process all N columns with fixed height padding and exact width truncation.
+	cols := make([][]string, n)
+	for i := 0; i < n; i++ {
 		lines := strings.Split(columns[i], "\n")
 		truncated := make([]string, fixedHeight)
-		
+
 		for j := 0; j < fixedHeight; j++ {
 			if j < len(lines) {
 				line := lines[j]
-				// Truncate if too wide (consistent for all columns)
+				// Truncate if too wide (consistent for all columns).
 				if ansi.StringWidth(line) > colWidth {
 					line = ansi.Truncate(line, colWidth, "…")
 				}
-				// Pad to exact width for consistent alignment
+				// Pad to exact width for consistent alignment.
 				padLen := colWidth - ansi.StringWidth(line)
 				if padLen > 0 {
 					line = line + strings.Repeat(" ", padLen)
 				}
 				truncated[j] = line
 			} else {
-				// Empty line padded to exact width
+				// Empty line padded to exact width.
 				truncated[j] = strings.Repeat(" ", colWidth)
 			}
 		}
 		cols[i] = truncated
 	}
-	
-	// Join horizontally line by line
+
+	// Join horizontally line by line.
 	result := make([]string, fixedHeight)
 	for row := 0; row < fixedHeight; row++ {
-		result[row] = cols[0][row] + cols[1][row] + cols[2][row] + cols[3][row]
+		var sb strings.Builder
+		for i := 0; i < n; i++ {
+			sb.WriteString(cols[i][row])
+		}
+		result[row] = sb.String()
 	}
-	
+
 	return strings.Join(result, "\n")
 }
 

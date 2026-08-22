@@ -65,7 +65,35 @@ func (m *model) routeKeypress(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 	}
 
+	// Chat viewport scroll keys (PgUp/PgDn/End). Claimed before the textarea so
+	// they scroll the conversation instead of moving the prompt cursor. Only
+	// when the chat viewport exists (normal mode).
+	if m.chat != nil {
+		if c, ok := m.handleChatScrollKey(msg); ok {
+			return c, ok
+		}
+	}
+
 	return m.handleTextareaShortcut(msg)
+}
+
+// handleChatScrollKey routes PgUp/PgDn/End to the chat viewport scroll state.
+// Returns (cmd, true) when the key was a chat-scroll key.
+func (m *model) handleChatScrollKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.String() {
+	case "pgup":
+		return m.scrollChat(scrollStep), true
+	case "pgdown":
+		return m.scrollChat(-scrollStep), true
+	case "end":
+		return func() tea.Msg { return followMsg{} }, true
+	}
+	return nil, false
+}
+
+// scrollChat packages a chat scroll delta into a scrollMsg for the Update loop.
+func (m *model) scrollChat(delta int) tea.Cmd {
+	return func() tea.Msg { return scrollMsg{delta: delta} }
 }
 
 // statusPanelVisible reports whether the startup status panel currently owns a

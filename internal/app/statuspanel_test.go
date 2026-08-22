@@ -18,7 +18,7 @@ var ansiPat = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func strip(s string) string { return ansiPat.ReplaceAllString(s, "") }
 
-func TestRenderStatusOverviewShowsSkillAndMCPColumns(t *testing.T) {
+func TestRenderStatusOverviewShowsSkillsAndMCPsOnly(t *testing.T) {
 	skillReg := skill.NewRegistryForTest(map[string]*skill.Skill{
 		"graph": {Name: "graph", State: skill.StateActive},
 	}, nil, nil)
@@ -26,14 +26,17 @@ func TestRenderStatusOverviewShowsSkillAndMCPColumns(t *testing.T) {
 		"github": {Name: "github"},
 		"fs":     {Name: "fs"},
 	})
+	subReg := subagent.NewRegistry()
+	subReg.Register(&subagent.AgentConfig{Name: "investigator"})
 
 	m := &model{
 		env:            env{Width: 80},
 		conv:           conv.NewModel(80),
 		welcomePending: true,
 		services: services{
-			Skill: skillReg,
-			MCP:   mcpReg,
+			Skill:    skillReg,
+			MCP:      mcpReg,
+			Subagent: subReg,
 		},
 	}
 
@@ -45,6 +48,10 @@ func TestRenderStatusOverviewShowsSkillAndMCPColumns(t *testing.T) {
 		if !strings.Contains(strip(out), want) {
 			t.Errorf("overview missing %q\nrendered:\n%s", want, out)
 		}
+	}
+	// Agents are deliberately not surfaced in the status overview.
+	if strings.Contains(strip(out), "Agents") || strings.Contains(strip(out), "investigator") {
+		t.Errorf("overview must not surface agents\nrendered:\n%s", out)
 	}
 }
 
@@ -62,34 +69,12 @@ func TestRenderStatusOverviewEmptyWhenNoItems(t *testing.T) {
 	}
 }
 
-func TestRenderStatusOverviewShowsAgentsColumn(t *testing.T) {
-	subReg := subagent.NewRegistry()
-	subReg.Register(&subagent.AgentConfig{Name: "investigator"})
-	subReg.Register(&subagent.AgentConfig{Name: "test-runner"})
-
-	m := &model{
-		env:            env{Width: 100},
-		conv:           conv.NewModel(100),
-		welcomePending: true,
-		services:       services{Subagent: subReg},
-	}
-	out := m.renderStatusOverview()
-	if out == "" {
-		t.Fatal("expected a non-empty overview with agents")
-	}
-	for _, want := range []string{"Agents", "investigator", "test-runner"} {
-		if !strings.Contains(strip(out), want) {
-			t.Errorf("overview missing %q\nrendered:\n%s", want, out)
-		}
-	}
-}
-
-// TestClipHorizontally trims a wide multi-line blob into a narrow viewport,
+// TestClipHorizontallyAndContentWidth trims a wide multi-line blob into a narrow viewport,
 // panning across the content with an offset, and never overruns the viewport.
 func TestClipHorizontallyAndContentWidth(t *testing.T) {
 	blob := kit.JoinColumns([]string{
 		"LSPs\n  gopls-python", "Skills\n  graph",
-		"MCPs\n  github", "Agents\n  investigator",
+		"MCPs\n  github",
 	}, -1)
 
 	cw := kit.ContentWidth(blob)

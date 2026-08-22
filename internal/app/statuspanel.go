@@ -1,11 +1,10 @@
-// Startup status overview — a compact, live four-column panel showing the
-// active LSP servers, skills, MCP servers, and available agents at the top of
-// the window while the session is still fresh (before the first committed
-// message). Mirrors crush's landing view (LSPs | MCPs | Skills | Agents) at
-// terminal-width scale. When the terminal is too narrow for all columns it is
-// horizontally clipped; Shift←/Shift→ pan it (statusPanelScrollX). It is
-// rendered from live service state every frame and disappears once content is
-// committed to scrollback (see renderChatSection in view.go).
+// Startup status overview — a compact, live three-column panel showing the
+// active LSP servers, skills, and MCP servers at the top of the window while
+// the session is still fresh (before the first committed message). Mirrors
+// crush's landing view (LSPs | Skills | MCPs) at terminal-width scale. Agents
+// are deliberately omitted; only LSPs, Skills, and MCPs are surfaced here. It
+// is rendered from live service state every frame and disappears once content
+// is committed to scrollback (see renderChatSection in view.go).
 package app
 
 import (
@@ -19,15 +18,15 @@ import (
 )
 
 // maxStatusRows limits the number of items shown per column (excluding title)
-// to prevent vertical overflow when there are many LSPs/MCPs/Skills/Agents.
+// to prevent vertical overflow when there are many LSPs/MCPs/Skills.
 const maxStatusRows = 10
 
-// renderStatusOverview assembles the LSPs · Skills · MCPs · Agents columns
-// into one bordered row. Returns "" when zero configured items exist across
-// all four so a fresh blank session stays clean.
+// renderStatusOverview assembles the LSPs · Skills · MCPs columns into one
+// bordered row. Returns "" when zero configured items exist across all three
+// so a fresh blank session stays clean.
 func (m model) renderStatusOverview() string {
 	viewport := maxInt(m.env.Width-4, 1)
-	colWidth := viewport / 4
+	colWidth := viewport / 3
 	if colWidth < 14 {
 		colWidth = 14
 	}
@@ -35,14 +34,13 @@ func (m model) renderStatusOverview() string {
 	lspCol := m.lspStatusColumn(colWidth)
 	skillCol := m.skillStatusColumn(colWidth)
 	mcpCol := m.mcpStatusColumn(colWidth)
-	agentCol := m.agentsStatusColumn(colWidth)
 
-	if lspCol == "" && skillCol == "" && mcpCol == "" && agentCol == "" {
+	if lspCol == "" && skillCol == "" && mcpCol == "" {
 		return ""
 	}
 
-	// Join columns with equal width (25% each of viewport).
-	content := kit.JoinColumns([]string{lspCol, skillCol, mcpCol, agentCol}, viewport)
+	// Join columns with equal width (⅓ each of viewport).
+	content := kit.JoinColumns([]string{lspCol, skillCol, mcpCol}, viewport)
 	inner := strings.Join(filterBlank([]string{content}), "")
 	if inner == "" {
 		return ""
@@ -58,36 +56,6 @@ func (m model) renderStatusOverview() string {
 	return kit.SelectorBorderStyle().
 		Width(maxInt(viewport, 20)).
 		Render(inner)
-}
-
-// agentsStatusColumn renders the available agents, one per row.
-// Limited to maxStatusRows items to prevent vertical overflow.
-// Each line is truncated to maxWidth to prevent wrapping.
-func (m model) agentsStatusColumn(maxWidth int) string {
-	if m.services.Subagent == nil {
-		return ""
-	}
-	configs := m.services.Subagent.ListConfigs()
-	if len(configs) == 0 {
-		return ""
-	}
-
-	title := "Agents"
-	rows := make([]string, 0, len(configs))
-	for i, c := range configs {
-		if i >= maxStatusRows {
-			break
-		}
-		// Strip newlines and truncate to fit column width
-		name := strings.ReplaceAll(c.Name, "\n", " ")
-		name = strings.Join(strings.Fields(name), " ")
-		line := "● " + name
-		if ansi.StringWidth(line) > maxWidth {
-			line = ansi.Truncate(line, maxWidth, "…")
-		}
-		rows = append(rows, line)
-	}
-	return strings.Join(append([]string{title}, rows...), "\n")
 }
 
 // lspStatusColumn renders the configured/active LSP servers. Each row carries

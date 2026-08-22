@@ -9,52 +9,61 @@ becomes state; this doc covers how state becomes characters on screen.
 > this codebase returns a `string` — ANSI escape codes for color and
 > style, plain UTF-8 for content. No off-screen buffers, no canvases.
 > Bubble Tea's `View()` returns a string and the framework writes it
-> to the terminal; `tea.Println` takes a string and writes it above
-> the alt-screen region. The "rendering pipeline" below is entirely
-> string composition; the terminal does the actual drawing.
+> to the terminal. Since the full-window (alt-screen) rewrite, all
+> conversation content renders inside one in-app viewport
+> (`charm.land/bubbles/v2/viewport`) that scrolls in place; the
+> terminal's native scrollback is no longer used for chat history.
 
-## Mental model: two surfaces
+## Mental model: one surface, one viewport
 
-The terminal window has **two surfaces** during a session, and every
-rendered string ends up on exactly one of them:
+The terminal runs in the **alternate screen buffer** (`View` sets
+`AltScreen = true`). Every message — committed and live — renders into
+one in-app viewport that fills the window above the pinned input strip:
 
 ```
 m.conv.Messages = [ msg0, msg1, msg2, msg3 | msg4, msg5 ]
                                             ▲
                                             CommittedCount = 4
 
-┌─ surface ──────────────────┬─ written by ───────┬─ contents ────────────┐
-│ Native terminal scrollback │ tea.Println        │ msg0..msg3            │
-│ (frozen once written;      │ (one call per      │ — committed messages  │
-│  you can scroll up to it)  │  committed message)│                       │
-├────────────────────────────┼────────────────────┼───────────────────────┤
-│ Bubble Tea repaint zone    │ View()             │ msg4..msg5 +          │
-│ (bottom N lines; rebuilt   │ (called every      │ pending spinners +    │
-│  on every Update)          │  Update)           │ input strip           │
-└────────────────────────────┴────────────────────┴───────────────────────┘
+┌─ surface ────────────────┬─ written by ──┬─ contents ────────────────────┐
+│ Chat viewport (one pane) │ View()        │ renderedBlocks (msg0..msg3)   │
+│  fills the window above  │ + commit args │ + live tail (msg4..msg5,      │
+│  the input; ScrollUp/    │               │   redrawn every frame)        │
+│  ScrollDown pages it     │               │ + tracker / status overview   │
+├──────────────────────────┼───────────────┼───────────────────────────────┤
+│ Footer (pinned bottom)   │ View()        │ queue preview, separator,     │
+│                          │               │ textarea, mode-status line    │
+└──────────────────────────┴───────────────┴───────────────────────────────┘
 ```
 
-A **streaming** assistant reply lives in the repaint zone while
-`Stream.Active == true`; when the stream finishes, `CommitMessages`
-makes one `tea.Println` call to **move** the same rendered string into
-scrollback above. `CommittedCount` then advances so the repaint zone
-stops re-drawing it. The user sees one visual transition, not a
-duplicate. The rule that prevents double-rendering is in
-`renderAndCommit(checkReady=true)`: never commit the last message while
-`Stream.Active` is true.
+The chat viewport is **always the same height** (terminal height minus
+the footer); only its scroll offset changes as the conversation grows.
+Scrolling is in-app: wheel / PgUp / PgDn adjust the viewport's Y offset,
+and when the user scrolls up past the bottom a "▼ End to return to
+latest" band appears above the input. Follow mode (bottom-pinned, the
+default) makes the view drift down as streaming blocks commit.
 
-**Both surfaces share the same render functions.** `RenderMessageAt`
-is what produces each message's string; what differs is the index
-range (scrollback: `0..CommittedCount`; repaint zone:
-`CommittedCount..len(Messages)`).
+A **streaming** assistant reply renders into the live tail while
+`Stream.Active == true`; when a block completes, the off-thread flush
+renders it and `handleFlushResult` **appends** it to the committed
+render cache (`chatView.renderedBlocks`), advancing the message's commit
+offsets so the live tail stops redrawing it. The user sees one visual
+transition, not a duplicate. The rule that prevents double-rendering is
+in `renderAndCommit(checkReady=true)`: never commit the last message
+while `Stream.Active` is true.
 
-## View() composes the repaint zone
+**Both committed and live content share the same render functions.**
+`RenderMessageAt` is what produces each message's string; what differs
+is where the result goes — committed rows join the cache once (never
+re-parsed), the live tail re-renders every frame.
+
+## View() composes the alt-screen frame
 
 `(*model).View()` in [`internal/app/view.go`](../../internal/app/view.go)
-runs after every `Update` and returns the string for the repaint zone.
+runs after every `Update` and returns the string for the chat viewport.
 
 ```go
-func (m *model) View() string {
+func (m *model) View() tea.View {
     //   ^ Go method on *model; `m` is the instance (Go's
     //     equivalent of `this`/`self`). The whole codebase uses `m`
     //     for the foreground model.
@@ -66,6 +75,9 @@ func (m *model) View() string {
 View reads comes from `m`'s fields. The sub-renderers it calls
 (`RenderActiveContent` etc.) take a `conv.RenderContext` struct, which
 `m.messageRenderParams()` assembles from `m`'s fields on each call.
+`View` also enables mouse reporting (`MouseModeCellMotion`) and routes
+wheel events to the model via the `OnMouse` closure — the closure only
+packages a `scrollMsg`; all state mutation happens in `Update`.
 
 View() picks one of four layouts, top-down:
 
@@ -79,8 +91,9 @@ View()
                                    separator bars
                                    (Question modal, Approval modal)
   4. otherwise (normal mode) ──► renderNormalView()
-        ├─ chat section        ── conv.RenderActiveContent
-        ├─ turn-usage summary
+        ├─ chat viewport        ── cached committed blocks + live tail,
+        │                          scrolled in place (wheel / PgUp/PgDn)
+        ├─ [▼ End to return to latest]  ── only while scrolled up
         ├─ separator
         ├─ queue preview       ── if input was queued during a stream
         ├─ textarea
@@ -137,10 +150,10 @@ behaviors are intentional and not glamour defaults:
 | Inline tokens | A custom inline-markdown pass styles things glamour handles poorly (e.g. backticks inside other formatting). |
 
 Width matters: glamour computes column widths from its configured
-width. If the terminal resizes, glamour-wrapped content already in
-scrollback is now sized for the old width but the repaint zone uses
-the new width. That mismatch is exactly what `reflowScrollback`
-addresses (see Resize below).
+width. If the terminal resizes, glamour-wrapped blocks already in the
+viewport cache are sized for the old width, so they must be re-rendered.
+That mismatch is exactly what `reflowCommitted` addresses (see Resize
+below).
 
 ## Tool calls and inlined results
 
@@ -328,7 +341,7 @@ Repaint zone:
          file2
 ```
 
-### Step 5 — OnChunk(Done): promote the block to scrollback
+### Step 5 — OnChunk(Done): promote the block to the viewport cache
 
 ```
 event:           core.OnChunk{Done: true, Response: {...}}
@@ -352,48 +365,70 @@ for i in CommittedCount..len(Messages):    // i = 1, 2
          InlinedResults.IsResultInlined(2) = true → return ""       ← skipped
   if rendered != "": append to parts
 
-tea.Println(strings.Join(parts, "\n"))       // ONE Println, ONE block
+m.chat.appendBlock(strings.Join(parts, "\n")) // ONE append to the render cache
 CommittedCount = 3                           // caught up
 ```
 
 What changed on screen:
 
-- **Scrollback** gains one block:
-  `● I'll list them with ls. / ● Bash(ls) / ⎿ file1 / file2`. Frozen.
-- **Repaint zone** is now empty (`CommittedCount == len(Messages)`).
-- The next `View()` paints just the input strip — ready for the next
-  user prompt.
+- **Viewport cache** gains one block:
+  `● I'll list them with ls. / ● Bash(ls) / ⎿ file1 / file2`.
+- The live tail is now empty (`CommittedCount == len(Messages)`); the
+  next `View()` re-slices the viewport over the grown cache.
+- Follow mode (default) keeps the view pinned to the bottom, so the new
+  block appears to scroll in as it commits.
 
-The user watched the same string grow in the repaint zone; now that
-same string lives in scrollback, written exactly once. The
+The user watched the same string grow in the live tail; now that same
+string lives in the committed cache, written exactly once. The
 `IsResultInlined` short-circuit in `RenderSingleMessage` is what stops
-the ToolResult from also being Println'd standalone.
+the ToolResult from also being appended standalone.
+
+### Streaming mid-flight flush
+
+While a stream is still active, completed markdown blocks leave the
+live tail early via the flush pipeline (`FlushStreamingBlocks` →
+`renderSnapshotCmd` off-thread → `handleFlushResult`):
+
+```
+handleFlushResult:  row.ThinkingCommittedLen / ContentCommittedLen advance
+                    m.chat.appendBlock(rendered)
+                    (nothing is printed to the terminal)
+```
+
+This is what makes long assistant replies scroll through the viewport in
+paragraph-sized steps instead of jumping all at once at turn end — same
+mechanism, no `tea.Println`.
 
 ## Resize behavior
 
-Terminal resize is the **only event that invalidates already-painted
-scrollback** (glamour wraps at its configured width). `handleWindowResize`
-in [`internal/app/update_resize.go`](../../internal/app/update_resize.go):
+Terminal resize is the **only event that invalidates already-rendered
+viewport blocks** (glamour wraps at its configured width).
+`handleWindowResize` in
+[`internal/app/update_resize.go`](../../internal/app/update_resize.go):
 
 1. Update `m.env.Width / Height` and the textarea width.
 2. `m.conv.ResizeMDRenderer(newWidth)` — rebuilds glamour at the new
    width.
 3. If width actually changed and any messages are committed:
-   `reflowScrollback` clears the screen and re-Printlns every committed
-   message at the new width.
-4. Bubble Tea calls `View()` next to repaint the bottom strip at the
-   new width.
+   `reflowCommitted` re-renders every committed message at the new width
+   and `chatView.rebuildCache` replaces the cache in one go.
+4. Bubble Tea calls `View()` next; `syncSizeIfNeeded` re-slices the
+   viewport at the new size and, in follow mode, re-pins to bottom.
+
+Resize is the one path that re-renders the whole history. All other
+frames are incremental: appends only.
 
 ## File pointers
 
 | Concern | File |
 | --- | --- |
 | `View()` composition | [`internal/app/view.go`](../../internal/app/view.go) |
+| Chat viewport state (cache, follow, scroll) | [`internal/app/model_viewport.go`](../../internal/app/model_viewport.go) |
 | Per-message rendering + pairing | [`internal/app/conv/view.go`](../../internal/app/conv/view.go) |
 | User / assistant / notice rendering | [`internal/app/conv/message.go`](../../internal/app/conv/message.go) |
 | Markdown rendering | [`internal/app/conv/markdown.go`](../../internal/app/conv/markdown.go) |
 | Tool call / result rendering | [`internal/app/conv/tool_render.go`](../../internal/app/conv/tool_render.go) |
 | Compact / progress / tracker | [`internal/app/conv/compact.go`](../../internal/app/conv/compact.go), [`progress.go`](../../internal/app/conv/progress.go), [`tracker_view.go`](../../internal/app/conv/tracker_view.go) |
 | `MDRenderer` lifecycle | [`internal/app/conv/model.go`](../../internal/app/conv/model.go) |
-| Scrollback commit | [`internal/app/model_scrollback.go`](../../internal/app/model_scrollback.go) |
+| Commit pipeline (cache append) | [`internal/app/model_scrollback.go`](../../internal/app/model_scrollback.go) |
 | Resize + reflow | [`internal/app/update_resize.go`](../../internal/app/update_resize.go) |

@@ -89,7 +89,8 @@ Root files (no business logic; pure glue):
 | `model.go` | Root `model` struct + `Init()`. Behaviour split across siblings. |
 | `model_lifecycle.go` | Construction + run-option application + task lifecycle wiring + SessionEnd shutdown. |
 | `model_session.go` | Session save/load + per-session task storage + fork. |
-| `model_scrollback.go` | Render committed messages into terminal scrollback via `tea.Println`. |
+| `model_scrollback.go` | Commit pipeline: append rendered messages to the chat viewport render cache. |
+| `model_viewport.go` | Chat viewport state: render cache, follow/scroll machinery, wheel protocol. |
 | `model_agent_events.go` | `conv.Runtime` callbacks (turn start, tokens, tool results, turn end, stop). |
 | `model_compact.go` | Conversation compaction (auto + `/compact`). |
 | `model_tool_effects.go` | Side effects from tool calls (cwd, files, agent launches, overflow). |

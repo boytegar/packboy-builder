@@ -1,22 +1,39 @@
 // Window resize handling. handleWindowResize runs the first time we get a
 // window size (the deferred initial paint), where it commits any resumed
-// conversation. On later resizes the live tail re-renders at the new width on
-// the next frame, and already-committed scrollback is immutable to us — the
-// terminal rewraps it on its own. The managed frame stays only as tall as the
-// live tail + footer so committed scrollback sits directly above the input.
+// conversation. On later resizes the width reflow happens in the viewport
+// cache: committed blocks are re-rendered at the new width (their glamour
+// wrapping is width-dependent) and the viewport re-slices on the next frame.
 package app
 
 import (
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/boytegar/packboy-builder/internal/app/conv"
 )
 
+// reflowCommitted re-renders every committed message at the current width and
+// rebuilds the viewport render cache, so a resize reflows the whole
+// conversation (native-scrollback-style reflow, but in place).
+func (m *model) reflowCommitted() {
+	if m.chat == nil {
+		return
+	}
+	params := m.messageRenderParams()
+	var blocks []string
+	for i := 0; i < m.conv.CommittedCount; i++ {
+		if rendered := conv.RenderSingleMessage(params, i); rendered != "" {
+			blocks = append(blocks, rendered)
+		}
+	}
+	m.chat.rebuildCache(blocks)
+}
+
+// A resize mid-render is safe: a flushResult from an earlier geometry still
+// lands in the cache; appendBlock + next-frame re-sync handles it, and the
+// reflow above rebuilds from message state (correct width) on the next frame.
 func (m *model) handleWindowResize(msg tea.WindowSizeMsg) tea.Cmd {
 	m.env.Width = msg.Width
 	m.env.Height = msg.Height
-	// A chunk prepared before this resize used the old terminal geometry. Keep
-	// insertAbove safe by dropping the frozen managed frame; the payload may wrap
-	// differently, but no live UI rows can then be scrolled into history.
-	m.useMinimalScrollbackFrame()
 	m.userInput.SetTerminalHeight(msg.Height)
 	if ov, ok := m.activeOverlay(); ok {
 		if resizable, ok := ov.(resizableOverlay); ok {
@@ -25,6 +42,10 @@ func (m *model) handleWindowResize(msg tea.WindowSizeMsg) tea.Cmd {
 	}
 
 	m.conv.ResizeMDRenderer(msg.Width)
+	// The width changed: committed blocks must be re-rendered at the new width.
+	if msg.Width > 0 && m.conv.CommittedCount > 0 {
+		m.reflowCommitted()
+	}
 
 	if !m.env.Ready {
 		m.env.Ready = true

@@ -66,7 +66,7 @@ chains, directory structure of `internal/app/`) lives in
 keystroke (or cron fire, or hub event) through the agent and back to
 the terminal, see [`concepts/data-flow.md`](data-flow.md).
 For how rendered output is composed (View() layout, Markdown pipeline,
-tool blocks, scrollback vs repaint zone), see
+tool blocks, viewport cache + live tail), see
 [`concepts/rendering.md`](rendering.md).
 
 ## Layer Model

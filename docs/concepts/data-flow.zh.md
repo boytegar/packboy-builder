@@ -26,8 +26,9 @@ MVU 循环。三个 Bubble Tea 原语驱动一切：
 `(nil, false)` 就是常见的"不是我的活"返回。
 
 输入源全都落地为 `tea.Msg`。**`SubmitToAgent`** 是通往运行中 agent 的
-唯一出口。渲染走两条路：`tea.Println`（终端 scrollback）+ `View()`
-（底部 UI 条）。
+唯一出口。渲染全部在 `View()` 内部完成：alt-screen 聊天 viewport（`View().AltScreen = true`）
+把所有对话内容画在一个可滚动的面板里，输入条始终钉在底部。
+agent 完成的消息直接 append 进 viewport 的渲染缓存；终端原生 scrollback 不再使用。
 
 ```
    ┌──────────────────────────────────────────────────────────────┐
@@ -62,7 +63,7 @@ MVU 循环。三个 Bubble Tea 原语驱动一切：
    │                  Update → conv.Update → callbacks            │
    │                      │                                       │
    │                      ▼                                       │
-   │             CommitMessages → tea.Println → scrollback        │
+   │             CommitMessages → appendBlock → viewport 缓存        │
    │                      │                                       │
    │                      ▼                                       │
    │                   View() → bottom UI strip                   │
@@ -137,7 +138,7 @@ routeKeypress → handleTextareaShortcut
                   │
                   ├─ conv.Append(msg)
                   │     追加到 m.conv.Messages。这是 TUI 自己的**显示
-                  │     副本**——View() 把它渲染成 scrollback，
+                  │     副本**——View() 把它渲染进 viewport，
                   │     PersistSession 把它写盘。agent **不会**在每次
                   │     发送时读取这个切片；它维护自己独立的内部消息
                   │     历史。两边通过事件保持同步（见 Path D）。
@@ -194,7 +195,7 @@ handleSubmit → dispatchSubmission
               │
               ▼
    c.env.Conversation.AddNotice(result)    显示 "conversation cleared"
-   c.env.CommitMessages()                  → tea.Println 写入 scrollback
+   c.env.CommitMessages()                  → appendBlock 写入 viewport 缓存
 ```
 
 每个 slash 命令的 handler 通过 `env.*` 读 service 实时状态、通过回调
@@ -436,7 +437,7 @@ Update → routeToSubModel                update.go
        ├─ m.AppendToLast(text)          扩长进行中的 message
        └─ 如果 chunk.Done && 无工具调用:
               Stream.Active = false
-              rt.CommitMessages()       搬到 scrollback（见下）
+              rt.CommitMessages()       搬进 viewport 缓存（见下）
         │
         ▼
    PostInfer                            applyPostInfer
@@ -462,65 +463,53 @@ Update → routeToSubModel                update.go
 
 ### 流式文字到底渲染在哪里
 
-终端窗口在 session 期间有**两块表面**：
+整个窗口就是 alt-screen 聊天 viewport：上面一块可滚动的对话面板，下面
+一条钉死的 footer（输入 + 状态）。没有东西写进终端原生 scrollback。
 
 ```
-   终端原生 scrollback                       Bubble Tea 重绘区
-   （可以往上翻看的历史；                    （底部 N 行；每次 Update
-    永远不会重绘——用 tea.Println              整块重画；重绘之间内容
-    一行一行写上去）                          被丢弃）
+   聊天 viewport（一块面板）
+   （内容增长，原地滚动 —— 滚轮 / PgUp / PgDn）
+        ▼
+   ─── 钉在底部的 footer ─────────────────
+     ❯ 在这里输入消息……   （textarea、状态行）
 ```
 
-同一个窗口，但写入方式不同。Bubble Tea 拥有底部 N 行；上面所有内容都是
-它通过 `tea.Println` 写出去的常规终端输出。
-
-**消息流式期间**，正在生成的文字活在**重绘区**而**不**在 scrollback。
-每条 OnChunk 让 `m.conv.Messages` 里最后那条 assistant message 增长，
-View() 把重绘区重新画一遍，用户就看见文字逐字 token 蹦出来：
+**消息流式期间**，正在生成的文字活在**存活 tail**——viewport 内容里
+尚未 commit 的末尾切片。每条 OnChunk 让 `m.conv.Messages` 里最后那条
+assistant message 增长，View() 每帧重渲 tail，用户看见文字逐字 token
+蹦出来：
 
 ```
-   ─── 终端 scrollback（frozen）──────────────────────
-     user: 帮我写首关于大海的诗                       ← 已 commit
-   ─── Bubble Tea 重绘区（每次 Update 重画）──────────
+   ─── 聊天 viewport ────────────────────────
+     user: 帮我写首关于大海的诗             ← 已 commit（渲染缓存）
      assistant: 古老石上低语的浪，
-                潮水▮                                  ← 在 conv.Messages 里，
-                                                         Stream.Active=true,
-                                                         尚未 commit
-     ─────────────────────────────────────────────
+                潮水▮                        ← 存活 tail，
+                                               Stream.Active=true,
+                                               尚未 commit
+     ─────────────────────────────────────
      ❯ （textarea 流式期间被禁用）
 ```
 
-**流完之后**（最后一条 OnChunk 携带 `Done=true` 且无工具调用），
-`CommitMessages` 对完成的消息调一次 `tea.Println`。这会把这条消息
-**从重绘区"抬"到上面的 scrollback**：
+**一块完成后**，后台 flush 渲染好它，`handleFlushResult` 把它 append 进
+已提交的渲染缓存（`chatView.appendBlock`），推进 commit 偏移。存活 tail
+缩短那块；follow 模式把视图钉在底部，新块看起来是滚进来的。整条消息
+（或一整段）**恰好**落进缓存一次：
 
 ```
-   ─── 终端 scrollback（frozen）──────────────────────
-     user: 帮我写首关于大海的诗
-     assistant: 古老石上低语的浪，                    ← 现在 commit 完，
-                潮水退去又回涨，……                     一次性通过
-                                                        tea.Println 写入
-   ─── Bubble Tea 重绘区（每次 Update 重画）──────────
-     （空 —— CommittedCount 追上了 len(Messages)）
-     ─────────────────────────────────────────────
+   ─── 聊天 viewport ─────────────────────────
+     user: 谁写了首关于大海的诗
+     assistant: 古老回响的风，
+          石头、潮水退去又回涨，……            ← 现在 commit 了（缓存）
+     ─────────────────────────────────────
      ❯ 在这里输入消息……
 ```
 
-防止消息**同时**出现在两边的规则在 `renderAndCommit(checkReady=true)`
-里：`Stream.Active == true` 时它绝不 commit 最后一条 message。
-所以流式期间该消息只在重绘区；流完，一次 `tea.Println` 搬它去
-scrollback，`CommittedCount` 前进一格，重绘区不再画它。
-
-这个边界还有一条 renderer 层的顺序约束。Bubble Tea 通常只把最新的
-`View()` 放进队列，等 frame ticker 异步刷新；`tea.Println` 却会立即向
-scrollback 插入内容。Packboy Builder 的本地 Bubble Tea 补丁会在 `insertAbove`
-计算滚屏几何之前同步刷新队列中的 managed frame。没有这道屏障时，
-`CommittedCount` 可能已经在逻辑 View 中隐藏内容，而缩短后的 frame
-还没有真正写到终端，旧 live frame 的行就可能被永久焊进原生
-scrollback。`go.mod` 中的替代依赖固定到
-[`yanmxa/bubbletea@81ba608`](https://github.com/yanmxa/bubbletea/commit/81ba608a2d90bacdc115d6b3acc6b1c12cb44e5d)；
-等[上游 issue #1736](https://github.com/charmbracelet/bubbletea/issues/1736)
-发布等价屏障后即可移除。
+防止消息同时出现在两处（存活 tail 和缓存）的规则在
+`renderAndCommit(checkReady=true)` 里：`Stream.Active == true` 时它
+绝不 commit 最后一条 message。所以流式期间它只在存活 tail；流完，
+一次 `appendBlock` 搬进缓存，`CommittedCount` 前进一格，tail 不再画它。
+已提交块是渲染好的 ANSI 字符串缓存——viewport 从不重解析它们，长对话
+滚动依然便宜。
 
 工具调用的 spinner 也是同样道理：工具在跑时它在重绘区，结果到了它就
 消失。

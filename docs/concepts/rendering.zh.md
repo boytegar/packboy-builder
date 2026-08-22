@@ -8,48 +8,56 @@
 > **"渲染"在这个代码库里的意思是：返回一个字符串。** 所有 `Render*`
 > 函数返回的就是 `string`——ANSI 转义码控制颜色和样式，UTF-8 字符是
 > 内容。没有 off-screen buffer，没有 canvas。Bubble Tea 的 `View()`
-> 返回一个 string，框架把它写到终端；`tea.Println` 接受一个 string，
-> 把它写到 alt-screen 区域之上。下面的"渲染管线"全程都是字符串组装；
-> 真正的"画"是终端干的。
+> 返回一个 string，框架把它写到终端。自从全面改为全窗口（alt-screen）
+> 渲染后，所有对话内容都在一个应用内 viewport
+> （`charm.land/bubbles/v2/viewport`）里原地滚动；终端原生 scrollback
+> 不再承担聊天历史。
 
-## 心智模型：两块表面
+## 心智模型：一块表面 + 一个 viewport
 
-会话期间终端窗口有**两块表面**，每条渲染出的字符串都恰好落到其中一块：
+终端运行在**备选屏幕缓冲（alt-screen）**（`View` 设 `AltScreen = true`）。
+每条消息——已提交和存活的——都渲染进一个应用内 viewport，填满窗口里
+输入条上方的整个区域：
 
 ```
 m.conv.Messages = [ msg0, msg1, msg2, msg3 | msg4, msg5 ]
                                             ▲
                                             CommittedCount = 4
 
-┌─ 表面 ───────────────────┬─ 写入方式 ─────────┬─ 内容 ────────────────┐
-│ 终端原生 scrollback       │ tea.Println        │ msg0..msg3            │
-│ （写入即冻结；可以        │ （每条 commit 消息  │ — 已 commit 的消息    │
-│  滚轮翻回去看）           │  调一次）           │                       │
-├──────────────────────────┼────────────────────┼───────────────────────┤
-│ Bubble Tea 重绘区         │ View()             │ msg4..msg5 +          │
-│ （底部 N 行；每次 Update  │ （每次 Update      │ pending spinner +     │
-│  整块重画）               │  都调）             │ 输入条                │
-└──────────────────────────┴────────────────────┴───────────────────────┘
+┌─ 表面 ───────────────┬─ 写入方式 ─┬─ 内容 ──────────────────────┐
+│ 聊天 viewport         │ View()     │ renderedBlocks（msg0..msg3） │
+│ （一块，占满输入条    │ + commit   │ + 存活 tail（msg4..msg5，    │
+│  上方窗口；滚轮/      │ 参数        │   每帧重画）                │
+│  PgUp/PgDn 原地翻页） │            │ + tracker / 状态概览          │
+├──────────────────────┼────────────┼──────────────────────────────┤
+│ Footer（钉在底部）     │ View()     │ queue 预览、分隔线、textarea、│
+│                      │            │ 模式/状态行                  │
+└──────────────────────┴────────────┴──────────────────────────────┘
 ```
 
-**流式中**的 assistant 回复待在重绘区，期间 `Stream.Active == true`；
-流完时 `CommitMessages` 调一次 `tea.Println`，把**同一段渲染好的字符串**
-搬到上面的 scrollback。`CommittedCount` 前进一格，重绘区就不再画这条。
-用户看到的是一次视觉过渡，不是重复显示。防止双重渲染的规则在
-`renderAndCommit(checkReady=true)` 里：`Stream.Active` 为 true 时绝不
-commit 最后一条消息。
+聊天窗口 **高度恒定**（终端高减 footer 高），只有滚动偏移随对话增长变化。
+滚动发生在应用内：滚轮 / PgUp / PgDn 调整 Y 偏移；用户往上滚越过底部时，
+输入条上方会出现 "▼ End to return to latest" 提示。默认的 follow 模式
+（钉在底部）让新提交的流式块自动带视图往下。
 
-**两块表面用同一套渲染函数。** `RenderMessageAt` 产出每条消息的字符串；
-差别只在消息索引范围（scrollback：`0..CommittedCount`；重绘区：
-`CommittedCount..len(Messages)`）。
+**流式中**的 assistant 回复先待在存活 tail（`Stream.Active == true`）；
+一块完成后后台 flush 渲染好它，`handleFlushResult` 把它 **append** 进
+已提交的渲染缓存（`chatView.renderedBlocks`），推进 commit 偏移，存活
+tail 就不再重画它。用户看到的是一次视觉过渡，不是重复。防止双重渲染的
+规则在 `renderAndCommit(checkReady=true)`：`Stream.Active` 为 true 时
+绝不 commit 最后一条消息。
 
-## View() 组合出重绘区
+**已提交和存活内容共用同一套渲染函数。** `RenderMessageAt` 产出每条消息
+的字符串；差别在结果去向——已提交行只 join 一次（不再重解析），存活
+tail 每帧重渲染。
+
+## View() 组合出全窗口帧
 
 [`internal/app/view.go`](../../internal/app/view.go) 里的
-`(*model).View()` 每次 `Update` 后都跑一遍，返回重绘区那串字符。
+`(*model).View()` 每次 `Update` 后都跑一遍，返回聊天窗口那串字符。
 
 ```go
-func (m *model) View() string {
+func (m *model) View() tea.View {
     //   ^ Go 里 *model 上的方法；`m` 是当前实例
     //     （相当于其它语言的 `this`/`self`）。
     //     整个 codebase 都用 `m` 指代前台 model。
@@ -59,32 +67,10 @@ func (m *model) View() string {
 
 **没有输入参数**——这是 Bubble Tea 的约定。View 要读的全部状态都来自
 `m` 的字段。它派发的子渲染函数（`RenderActiveContent` 等）接收
-`conv.RenderContext` struct，这个 struct 是 `m.messageRenderParams()`
-每次调用时从 `m` 的字段组装出来的。
-
-View 从四种布局里挑一种，自顶向下：
-
-```
-View()
-  1. !m.env.Ready              ──► "\n  Loading..."
-  2. 有 popup 活动？           ──► popup.Render() — 全屏
-                                   （slash 命令选择器：/models、
-                                   /tools、/skills 等）
-  3. 有 modal 活动？           ──► modal.Render() 夹在分隔符之间
-                                   （Question modal、Approval modal）
-  4. 否则（普通模式）         ──► renderNormalView()
-        ├─ chat section        ── conv.RenderActiveContent
-        ├─ 本回合 token 用量
-        ├─ 分隔符
-        ├─ 队列预览            ── 流式期间排队的输入
-        ├─ textarea
-        ├─ suggestion list     ── /-命令、@-文件名的自动补全
-        ├─ 分隔符
-        └─ status line         ── 模型名、token、模式
-```
-
-Popup（全屏）和 modal（夹在中间）听起来差不多，但渲染流程不同——modal
-后面还能看到 chat，popup 后面看不到。
+`conv.RenderContext` struct，由 `m.messageRenderParams()` 每次调用从
+`m` 的字段组装。`View` 还开启鼠标上报（`MouseModeCellMotion`），通过
+`OnMouse` 闭包把滚轮事件打包成 `scrollMsg` 送进模型——闭包不碰状态，
+所有状态变更都在 `Update` 里。
 
 ## 单条消息怎么渲染
 
@@ -128,8 +114,8 @@ RenderMessageAt ─┤
 | 软换行 | LLM 在 ~80 列硬换行；把软换行合成段落后再交给 glamour 按真实宽度换行。 |
 | 内联标记 | 自定义内联 markdown pass 处理 glamour 渲染不好的部分（如嵌套格式里的反引号）。 |
 
-宽度为什么重要：glamour 根据配置宽度算列宽。终端 resize 后，scrollback
-里的内容是按旧宽度换行的，但重绘区按新宽度。这正是 `reflowScrollback`
+宽度为什么重要：glamour 根据配置宽度算列宽。终端 resize 后，viewport
+里已渲染的块按旧宽度换行，但新帧按新宽度。这正是 `reflowCommitted`
 要解决的问题（见下文 Resize 一节）。
 
 ## 工具调用 + inline 结果
@@ -310,7 +296,7 @@ RenderMessageRange(ctx, 1, 3, includeSpinner=true):
          file2
 ```
 
-### Step 5 — OnChunk(Done)：把整块送进 scrollback
+### Step 5 — OnChunk(Done)：把整块送进 viewport 缓存
 
 ```
 event:           core.OnChunk{Done: true, Response: {...}}
@@ -334,34 +320,36 @@ for i in CommittedCount..len(Messages):    // i = 1, 2
          InlinedResults.IsResultInlined(2) = true → return ""    ← 跳过
   if rendered != "": 加到 parts
 
-tea.Println(strings.Join(parts, "\n"))       // 一次 Println，一整块
+m.chat.appendBlock(strings.Join(parts, "\n")) // 一次 append，一整块
 CommittedCount = 3                           // 追上
 ```
 
 屏幕上的变化：
 
-- **Scrollback** 多出一整块：
-  `● 我用 ls 列一下。 / ● Bash(ls) / ⎿ file1 / file2`。冻在那儿。
-- **重绘区** 现在空了（`CommittedCount == len(Messages)`）。
-- 下一次 `View()` 只画底部输入条——等下一条用户消息。
+- **viewport 缓存** 多出一整块：
+  `● 我用 ls 列一下。 / ● Bash(ls) / ⎿ file1 / file2`。
+- 存活 tail 空了（`CommittedCount == len(Messages)`）；下一次 `View()`
+  在增长后的缓存上重新切片。
+- 默认 follow 模式把视图钉在底部，新块提交时看起来是滚进来的。
 
-刚才用户看到一直在增长的同一段字符，现在原原本本住进了 scrollback——
-通过**一次** `tea.Println` 写过去的。`RenderSingleMessage` 里
-`IsResultInlined` 的 short-circuit 是阻止 ToolResult 被独立 Println
-一遍的关键。
+刚才用户看到一直在增长的同一段字符，现在原原本本住进了已提交缓存——
+通过**一次** `appendBlock` 写过去的。`RenderSingleMessage` 里的
+`IsResultInlined` short-circuit 阻止 ToolResult 被独立 append 一遍。
 
 ## Resize 行为
 
-终端 resize 是**唯一会让已经写到 scrollback 里的内容失效**的事件
-（glamour 按配置宽度换行）。
-[`internal/app/update_resize.go`](../../internal/app/update_resize.go)
+终端 resize 是**唯一会让已渲染的 viewport 块失效**的事件（glamour 按
+配置宽度换行）。[`internal/app/update_resize.go`](../../internal/app/update_resize.go)
 里的 `handleWindowResize`：
 
 1. 更新 `m.env.Width / Height` 和 textarea 宽度
 2. `m.conv.ResizeMDRenderer(newWidth)`——按新宽度重建 glamour
-3. 宽度真的变了且已经有 commit 的消息：`reflowScrollback` 清屏，
-   用新宽度对每条 commit 消息重新 `tea.Println` 一次
-4. Bubble Tea 接着调 `View()` 用新宽度重画底部条
+3. 宽度真的变了且已有 commit 的消息：`reflowCommitted` 用新宽度重渲染
+   每条 commit 消息，`chatView.rebuildCache` 一次替换缓存
+4. Bubble Tea 接着调 `View()`；`syncSizeIfNeeded` 按新尺寸重切 viewport，
+   follow 模式下重新钉到底部
+
+Resize 是唯一整段重渲染历史的地方；其余帧都是增量（只 append）。
 
 ## 文件指路
 
@@ -374,5 +362,6 @@ CommittedCount = 3                           // 追上
 | 工具调用 / 结果渲染 | [`internal/app/conv/tool_render.go`](../../internal/app/conv/tool_render.go) |
 | Compact / 进度 / tracker | [`internal/app/conv/compact.go`](../../internal/app/conv/compact.go)、[`progress.go`](../../internal/app/conv/progress.go)、[`tracker_view.go`](../../internal/app/conv/tracker_view.go) |
 | `MDRenderer` 生命周期 | [`internal/app/conv/model.go`](../../internal/app/conv/model.go) |
-| Scrollback commit | [`internal/app/model_scrollback.go`](../../internal/app/model_scrollback.go) |
+| 聊天窗口状态（缓存/follow/滚动） | [`internal/app/model_viewport.go`](../../internal/app/model_viewport.go) |
+| Commit 管线（缓存 append） | [`internal/app/model_scrollback.go`](../../internal/app/model_scrollback.go) |
 | Resize + reflow | [`internal/app/update_resize.go`](../../internal/app/update_resize.go) |

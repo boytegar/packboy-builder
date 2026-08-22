@@ -81,6 +81,12 @@ var (
 	SeparatorStyle = lipgloss.NewStyle().
 			Foreground(kit.AdaptiveColor{Dark: "#3F3F46", Light: "#E4E4E7"})
 
+	// ScrollBannerStyle is the "▼ End to return to latest" hint shown above the
+	// input when the chat is scrolled back from the bottom. Dim so it reads as
+	// chrome, not conversation.
+	ScrollBannerStyle = lipgloss.NewStyle().
+				Foreground(kit.CurrentTheme.TextDim)
+
 	ThinkingStyle = lipgloss.NewStyle().
 			Foreground(kit.CurrentTheme.Muted)
 
