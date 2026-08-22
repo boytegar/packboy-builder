@@ -206,6 +206,13 @@ func (m *model) handleTextareaShortcut(msg tea.KeyMsg) (tea.Cmd, bool) {
 		if !m.userInput.LastCtrlC.IsZero() && now.Sub(m.userInput.LastCtrlC) < 1*time.Second {
 			return m.QuitWithCancel()
 		}
+		// Nothing left to clear: /clear would only repaint the screen, so the
+		// key would look inert. Exit on the first tap instead of demanding a
+		// double-tap the user has no reason to expect.
+		if len(m.conv.Messages) == 0 {
+			m.userInput.LastCtrlC = time.Time{}
+			return m.QuitWithCancel()
+		}
 		m.userInput.LastCtrlC = now
 		_, cmd, _ := m.executeCommand(context.Background(), "/clear")
 		return cmd, true
