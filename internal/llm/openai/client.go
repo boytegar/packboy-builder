@@ -3,6 +3,8 @@ package openai
 import (
 	"cmp"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -323,6 +325,17 @@ func (c *Client) streamResponses(ctx context.Context, opts llm.CompletionOptions
 		}
 
 		if err := stream.Err(); err != nil {
+			// Mirror openaicompat/anthropic: keep partial content on a truncated
+			// or malformed SSE data: line ("unexpected end of JSON input")
+			// instead of failing and discarding what the user already received.
+			// The openai-go SDK's SSE reader stores a json.SyntaxError in
+			// stream.Err() when a data: line is truncated mid-flight.
+			if state.HasContent() && isJSONUnmarshalErr(err) {
+				state.AddToolCallsByKey(toolCalls)
+				state.EnsureToolUseStopReason()
+				state.Finish(ctx, ch)
+				return
+			}
 			state.Fail(ctx, ch, openaicompat.NormalizeAPIError(c.name, err))
 			return
 		}
@@ -488,3 +501,22 @@ func extractReasoning(output []responses.ResponseOutputItemUnion) []core.Reasoni
 
 // Ensure Client implements Provider
 var _ llm.Provider = (*Client)(nil)
+
+// isJSONUnmarshalErr reports whether err is a JSON parsing failure such as
+// "unexpected end of JSON input". The openai-go SDK's Responses SSE reader
+// stores this in stream.Err() when a data: line is truncated mid-flight. We
+// detect it via errors.As against *json.SyntaxError and also by message
+// substring (the SDK may wrap the error in its own type that doesn't satisfy
+// errors.As).
+func isJSONUnmarshalErr(err error) bool {
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		return true
+	}
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		if strings.Contains(e.Error(), "unexpected end of JSON input") {
+			return true
+		}
+	}
+	return false
+}

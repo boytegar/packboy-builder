@@ -56,6 +56,7 @@ type model struct {
 	conv            conv.Model           // Agent Outbox: conversation + output rendering
 	env             env                  // Shared app state: provider, session, permission, plan, config
 	services        services             // Domain service singletons, injected at construction
+	chat            *chatView            // alt-screen chat viewport + render cache (see model_viewport.go)
 	learnedStores   *learnedStoreContext // live cwd/settings source for /evolve inventories
 
 	// welcomePending marks the startup splash as not yet frozen into scrollback.
@@ -65,6 +66,13 @@ type model struct {
 	// Set in Run for fresh sessions. See view.go (liveWelcome) and
 	// model_scrollback.go (takeWelcomeBanner).
 	welcomePending bool
+
+	// statusPanelScrollX is the horizontal scroll offset (in columns) of the
+	// startup status panel. When the terminal is too narrow to fit all four
+	// columns (LSPs · Skills · MCPs · Agents), Shift←/Shift→ pan the clipped
+	// viewport. Only meaningful while welcomePending && no committed messages;
+	// reset by the panel whenever it disappears.
+	statusPanelScrollX int
 
 	// reviewerApprovals / reviewerEscalations count auto-review outcomes this
 	// session for the status bar: gray-zone tool calls the judge auto-approved

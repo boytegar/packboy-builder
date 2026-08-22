@@ -3,6 +3,19 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v1.23.3] - 2026-08-22
+
+### Added
+- Recursive subagents: in auto/bypass permission mode, subagents now inject an `Agent` tool backed by a child executor (default max recursion depth 5), letting subagents delegate further instead of dead-ending.
+- Subagent status panel on session start: four-column overview (models, tokens, mode) with Shift←/Shift→ horizontal panning on narrow terminals.
+- Alt-screen chat rendering: all conversation content draws in one scrollable viewport above a pinned input strip; finished messages append to the viewport's render cache instead of the terminal's native scrollback.
+- Ctrl+C semantics: on an empty conversation the first tap quits; with messages, the first tap clears and the next quits — no more invisible double-tap.
+
+### Changed
+- MCP HTTP transport keeps reading the SSE stream in a goroutine after the response, so post-response notifications still dispatch; body lifecycle is owned by the SSE parser.
+- OpenAI-compatible streaming keeps partial content on a truncated/malformed SSE line instead of discarding what the user already received.
+- Suggestion list matching reworked; scroll-back direction fixed (wheel-up/pgup now correctly reveals older content via viewport offset negation).
+
 ## [v1.23.2] - 2026-08-11
 
 ### Changed

@@ -9,6 +9,10 @@ import (
 
 	"github.com/boytegar/packboy-builder/internal/app/conv"
 	"github.com/boytegar/packboy-builder/internal/app/input"
+	"github.com/boytegar/packboy-builder/internal/llm"
+	"github.com/boytegar/packboy-builder/internal/setting"
+	"github.com/boytegar/packboy-builder/internal/subagent"
+	"github.com/boytegar/packboy-builder/internal/todo"
 )
 
 // The composer prints the "❭ " prompt once, on the first row, while inputCursor
@@ -100,25 +104,43 @@ func TestTailLines(t *testing.T) {
 	}
 }
 
-// Full-height top padding pushed native scrollback (thinking/content) far above
-// the input and left a large blank band between them. The managed frame must
-// stay only as tall as live tail + footer.
-func TestRenderNormalViewDoesNotPadToTerminalHeight(t *testing.T) {
+// The managed frame must not be padded to the terminal height once content
+// moves into native scrollback: full-height padding would inject a blank
+// band between the conversation tail and the input separator, breaking the
+// read as one continuous flow from committed scrollback down to the
+// composer. With a short live tail the frame must be exactly chat+footer
+// (well under terminal height), not chat+gap+footer (exactly height).
+func TestRenderNormalViewAnchorsFooterToTerminalBottom(t *testing.T) {
 	const width, height = 80, 40
 	m := &model{
 		env:       env{Width: width, Height: height, Ready: true},
 		conv:      conv.NewModel(width),
+		chat:      chatViewer(width, height-7),
 		userInput: input.New("", width, nil, input.SelectorDeps{}),
+		services: services{
+			Setting:  setting.Default(),
+			LLM:      llm.Default(),
+			Subagent: subagent.NewRegistry(),
+			Tracker:  todo.NewStore(),
+		},
 	}
 	m.userInput.Textarea.SetWidth(width - 4 - 2)
 
-	separator := strings.Repeat("─", width)
+	separator := strings.Repeat("\u2500", width)
 	view, _ := m.renderNormalView(separator, "")
 	lines := strings.Count(view, "\n") + 1
-	if lines >= height {
-		t.Fatalf("managed frame is %d lines tall (terminal=%d); full-height padding reintroduced a blank gap above the input", lines, height)
+	if lines != height {
+		t.Fatalf("full-window frame is %d lines tall (terminal=%d); chat must fill the window above a pinned footer", lines, height)
 	}
-	if strings.HasPrefix(view, "\n") {
-		t.Fatalf("managed frame starts with a blank top pad: %q", view[:min(40, len(view))])
+	// The footer (input + separator + status) is the last block of the frame,
+	// so the composer always sits on the bottom rows.
+	footer, _ := m.renderFooter(separator)
+	if !strings.HasSuffix(view, footer) {
+		t.Fatalf("full-window frame must end with the footer (input pinned bottom); footer = %q", footer)
+	}
+	// With a short live tail the chat viewport consumes the remaining rows.
+	chatRows := lines - strings.Count(footer, "\n")
+	if chatRows < 1 {
+		t.Fatalf("no room for the chat viewport above the footer")
 	}
 }

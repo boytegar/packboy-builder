@@ -326,20 +326,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case flushResultMsg:
 		return m, m.handleFlushResult(msg)
-	case scrollbackPrintReadyMsg:
-		// Bubble Tea's renderer barrier flushes the latest managed View before
-		// insertAbove. Sequence ensures completion is observed only after this
-		// chunk has been inserted.
-		content, ok := m.prepareScrollbackPrint(msg.id)
-		if !ok {
+	case scrollMsg:
+		if m.chat != nil && m.chat.onScroll(msg.delta) {
 			return m, nil
 		}
-		return m, tea.Sequence(
-			tea.Println(content),
-			func() tea.Msg { return scrollbackPrintDoneMsg{id: msg.id} },
-		)
-	case scrollbackPrintDoneMsg:
-		return m, m.finishScrollbackPrint(msg.id)
+		return m, nil
+	case followMsg:
+		if m.chat != nil && !m.chat.follow {
+			m.chat.follow = true
+			m.chat.buf.GotoBottom()
+		}
+		return m, nil
 	case conv.QuestionResponseMsg:
 		return m, m.handleQuestionResponse(msg)
 	case input.SecretPromptResponseMsg:

@@ -55,7 +55,87 @@ func (m *model) routeKeypress(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return c, ok
 	}
 
+	// Status-panel horizontal pan. Only active while the startup status panel
+	// is shown (fresh session, no committed messages). Shift←/Shift→ pan the
+	// clipped four-column overview when the terminal is too narrow. Claimed
+	// before the textarea so the arrows don't move the prompt cursor.
+	if m.statusPanelVisible() {
+		if c, ok := m.handleStatusPanelScroll(msg); ok {
+			return c, ok
+		}
+	}
+
+	// Chat viewport scroll keys (PgUp/PgDn/End). Claimed before the textarea so
+	// they scroll the conversation instead of moving the prompt cursor. Only
+	// when the chat viewport exists (normal mode).
+	if m.chat != nil {
+		if c, ok := m.handleChatScrollKey(msg); ok {
+			return c, ok
+		}
+	}
+
 	return m.handleTextareaShortcut(msg)
+}
+
+// handleChatScrollKey routes PgUp/PgDn/End to the chat viewport scroll state.
+// Returns (cmd, true) when the key was a chat-scroll key.
+func (m *model) handleChatScrollKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.String() {
+	case "pgup":
+		return m.scrollChat(scrollStep), true
+	case "pgdown":
+		return m.scrollChat(-scrollStep), true
+	case "end":
+		return func() tea.Msg { return followMsg{} }, true
+	}
+	return nil, false
+}
+
+// scrollChat packages a chat scroll delta into a scrollMsg for the Update loop.
+func (m *model) scrollChat(delta int) tea.Cmd {
+	return func() tea.Msg { return scrollMsg{delta: delta} }
+}
+
+// statusPanelVisible reports whether the startup status panel currently owns a
+// horizontally-scrollable view — i.e. the session is fresh (no committed
+// messages) and the panel actually rendered last frame.
+func (m model) statusPanelVisible() bool {
+	return m.welcomePending && m.conv.CommittedCount == 0
+}
+
+// handleStatusPanelScroll pans the startup status panel horizontally with
+// Shift←/Shift→ (scroll step = one column would be tedious; use a quarter of
+// the viewport, at least one full column). Returns (cmd, true) on a handled
+// key. left/right/=handled keys are intentionally not bound, so bare arrow keys
+// keep their textarea meaning.
+func (m model) handleStatusPanelScroll(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if msg.Key().Mod != tea.ModShift {
+		return nil, false
+	}
+	var delta int
+	switch msg.Key().Code {
+	case tea.KeyRight:
+		delta = 1
+	case tea.KeyLeft:
+		delta = -1
+	default:
+		return nil, false
+	}
+	m.statusPanelScrollX += delta * statusPanelScrollStep(m.env.Width)
+	if m.statusPanelScrollX < 0 {
+		m.statusPanelScrollX = 0
+	}
+	return nil, true
+}
+
+// statusPanelScrollStep is the horizontal pan distance in columns — a quarter
+// of the visible viewport, at least one.
+func statusPanelScrollStep(viewport int) int {
+	s := viewport / 4
+	if s < 1 {
+		return 1
+	}
+	return s
 }
 
 // handleTextareaShortcut handles keys that target the textarea itself:
@@ -124,6 +204,13 @@ func (m *model) handleTextareaShortcut(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		now := time.Now()
 		if !m.userInput.LastCtrlC.IsZero() && now.Sub(m.userInput.LastCtrlC) < 1*time.Second {
+			return m.QuitWithCancel()
+		}
+		// Nothing left to clear: /clear would only repaint the screen, so the
+		// key would look inert. Exit on the first tap instead of demanding a
+		// double-tap the user has no reason to expect.
+		if len(m.conv.Messages) == 0 {
+			m.userInput.LastCtrlC = time.Time{}
 			return m.QuitWithCancel()
 		}
 		m.userInput.LastCtrlC = now

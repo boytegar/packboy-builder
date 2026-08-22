@@ -17,7 +17,7 @@ import (
 )
 
 func flushTestModel(msg core.ChatMessage) *model {
-	m := &model{env: env{Width: 80}, conv: conv.NewModel(80)}
+	m := &model{env: env{Width: 80}, conv: conv.NewModel(80), chat: chatViewer(80, 24)}
 	m.conv.Messages = []core.ChatMessage{msg}
 	return m
 }
@@ -81,10 +81,10 @@ func TestTakeWelcomeBannerFreezesAndClears(t *testing.T) {
 	}
 }
 
-// A completed thinking paragraph (terminated by a blank line) commits to
-// scrollback mid-stream, before any content arrives — reasoning no longer waits
-// for the whole block to finish. The render runs off-thread; the committed
-// offset advances only once it lands.
+// A completed thinking paragraph (terminated by a blank line) commits to the
+// viewport cache mid-stream, before any content arrives — reasoning no longer
+// waits for the whole block to finish. The render runs off-thread; the
+// committed offset advances only once it lands.
 func TestFlushStreamingBlocksCommitsThinkingParagraph(t *testing.T) {
 	m := flushTestModel(core.ChatMessage{
 		Role:     core.RoleAssistant,
@@ -103,9 +103,12 @@ func TestFlushStreamingBlocksCommitsThinkingParagraph(t *testing.T) {
 	if m.flush.rendering {
 		t.Fatal("flush.rendering should clear once the render has landed")
 	}
-	if len(m.flush.pendingPrints) != 1 ||
-		!strings.Contains(m.flush.pendingPrints[0].current+m.flush.pendingPrints[0].remaining, "first paragraph of reasoning") {
-		t.Fatalf("scrollback queue = %#v, want the committed block queued once", m.flush.pendingPrints)
+	if len(m.chat.renderedBlocks) != 1 {
+		t.Fatalf("viewport cache blocks = %d, want 1 (the committed thinking block)",
+			len(m.chat.renderedBlocks))
+	}
+	if !strings.Contains(m.chat.renderedBlocks[0], "first paragraph of reasoning") {
+		t.Fatalf("viewport cache block = %q, want reasoning text", m.chat.renderedBlocks[0])
 	}
 }
 
@@ -138,99 +141,11 @@ func TestScrollbackPhysicalLinesMatchBubbleTeaAccounting(t *testing.T) {
 	}
 }
 
-func TestScrollbackChunkingPreservesStyledWrappedContent(t *testing.T) {
-	var flush flushState
-	content := "\x1b[31mabcdefghij\x1b[0m\nlast\n"
-	cmd := flush.queueScrollbackPrint(content)
-	if cmd == nil {
-		t.Fatal("the first chunk must start immediately")
-	}
-
-	var chunks []string
-	for cmd != nil {
-		ready := cmd().(scrollbackPrintReadyMsg)
-		content, ok := flush.prepareScrollbackPrint(ready.id, 4, 5, 3)
-		if !ok {
-			t.Fatal("ready chunk has no payload")
-		}
-		chunks = append(chunks, content)
-		cmd = flush.finishScrollbackPrint(ready.id)
-	}
-	if len(flush.pendingPrints) != 0 {
-		t.Fatalf("finished queue length = %d, want 0", len(flush.pendingPrints))
-	}
-
-	plain := ansi.Strip(strings.Join(chunks, "\n"))
-	if plain != "abcd\nefgh\nij\nlast\n" {
-		t.Fatalf("chunked content = %q, want all physical rows exactly once", plain)
-	}
-}
-
-func TestScrollbackFullHeightFrameMinimizesAndRestores(t *testing.T) {
-	m := flushTestModel(core.ChatMessage{})
-	m.env.Height = 1
-	cmd := m.queueScrollbackPrint("A")
-	if cmd == nil {
-		t.Fatal("the first chunk must start immediately")
-	}
-	ready := cmd().(scrollbackPrintReadyMsg)
-	if _, ok := m.prepareScrollbackPrint(ready.id); !ok || !m.flush.minimizeForPrint {
-		t.Fatal("a full-height frame must be minimized before printing")
-	}
-	if frame, ok := m.scrollbackFrameForPrint(); !ok || frame.Content != "" {
-		t.Fatalf("frame during print = %#v, ok=%v, want an empty frozen frame", frame, ok)
-	}
-	if next := m.finishScrollbackPrint(ready.id); next != nil {
-		t.Fatal("the one-row payload should finish in one minimized print")
-	}
-	if m.flush.minimizeForPrint || m.flush.frameForPrint != nil {
-		t.Fatal("the managed frame must be restored after the print completes")
-	}
-}
-
-func TestScrollbackPrintQueueIsSingleFlightFIFO(t *testing.T) {
-	m := flushTestModel(core.ChatMessage{})
-	firstCmd := m.queueScrollbackPrint("A")
-	if firstCmd == nil {
-		t.Fatal("the first queued print must start immediately")
-	}
-	if secondCmd := m.queueScrollbackPrint("B"); secondCmd != nil {
-		t.Fatal("a second print must wait until the in-flight head completes")
-	}
-
-	first := firstCmd().(scrollbackPrintReadyMsg)
-	firstContent, ok := m.prepareScrollbackPrint(first.id)
-	if !ok || firstContent != "A" {
-		t.Fatalf("first print content = %q, ok=%v, want A", firstContent, ok)
-	}
-	if next := m.finishScrollbackPrint(first.id + 1); next != nil {
-		t.Fatal("an out-of-order done message must not advance the queue")
-	}
-	if len(m.flush.pendingPrints) != 2 {
-		t.Fatalf("out-of-order done changed queue length to %d, want 2", len(m.flush.pendingPrints))
-	}
-
-	secondCmd := m.finishScrollbackPrint(first.id)
-	if secondCmd == nil {
-		t.Fatal("finishing the queue head must start the next print")
-	}
-	second := secondCmd().(scrollbackPrintReadyMsg)
-	secondContent, ok := m.prepareScrollbackPrint(second.id)
-	if !ok || secondContent != "B" {
-		t.Fatalf("second print content = %q, ok=%v, want B", secondContent, ok)
-	}
-	if next := m.finishScrollbackPrint(second.id); next != nil {
-		t.Fatal("finishing the final print must leave no command")
-	}
-	if len(m.flush.pendingPrints) != 0 {
-		t.Fatalf("finished queue length = %d, want 0", len(m.flush.pendingPrints))
-	}
-}
-
-func TestConsecutiveToolCommitsStayOutOfManagedFrameAndPrintOnceInOrder(t *testing.T) {
+func TestConsecutiveToolCommitsAppendToViewportCacheInOrder(t *testing.T) {
 	m := &model{
 		env:       env{Width: 100, Height: 24},
 		conv:      conv.NewModel(100),
+		chat:      chatViewer(100, 20),
 		userInput: input.New("", 100, nil, input.SelectorDeps{}),
 		services: services{
 			Subagent: subagent.NewRegistry(),
@@ -247,10 +162,7 @@ func TestConsecutiveToolCommitsStayOutOfManagedFrameAndPrintOnceInOrder(t *testi
 			Content:    "BASH_RESULT_SENTINEL",
 		}},
 	)
-	firstCmds := m.CommitMessages()
-	if len(firstCmds) != 1 || firstCmds[0] == nil {
-		t.Fatalf("first commit commands = %#v, want one active print", firstCmds)
-	}
+	m.CommitMessages() // appends the Bash block to the viewport cache
 
 	editCall := core.ToolCall{ID: "edit-1", Name: "Edit", Input: `{"file_path":"main.go","old_string":"old","new_string":"EDIT_RESULT_SENTINEL"}`}
 	m.conv.Messages = append(m.conv.Messages,
@@ -268,62 +180,27 @@ func TestConsecutiveToolCommitsStayOutOfManagedFrameAndPrintOnceInOrder(t *testi
 			},
 		}},
 	)
-	secondCmds := m.CommitMessages()
-	if len(secondCmds) != 1 || secondCmds[0] != nil {
-		t.Fatalf("second commit commands = %#v, want one queued nil command", secondCmds)
-	}
-	if len(m.flush.pendingPrints) != 2 {
-		t.Fatalf("queued prints = %d, want 2", len(m.flush.pendingPrints))
-	}
+	m.CommitMessages() // appends the Edit block after the Bash block
 
-	// A live repaint may contain later tool activity, blank fill, input, and the
-	// footer, but never either committed result. The renderer barrier can safely
-	// flush this frame before insertAbove because no handoff copy is present.
+	cache := strings.Join(m.chat.renderedBlocks, "\n")
+	// Both results land exactly once, in commit order.
+	for _, result := range []string{"BASH_RESULT_SENTINEL", "EDIT_RESULT_SENTINEL"} {
+		if count := strings.Count(cache, result); count != 1 {
+			t.Fatalf("viewport cache count for %q = %d, want 1: %q", result, count, cache)
+		}
+	}
+	// Committed results never appear in the live tail (renderChatSection).
 	liveFrame := "LIVE_EDIT_ACTIVITY\n" + strings.Repeat("\n", 12) + "INPUT_SENTINEL\nFOOTER_SENTINEL"
 	managed := m.renderChatSection(liveFrame, "")
 	for _, committed := range []string{"BASH_RESULT_SENTINEL", "EDIT_RESULT_SENTINEL"} {
 		if strings.Contains(managed, committed) {
-			t.Fatalf("managed frame contains committed result %q: %q", committed, managed)
+			t.Fatalf("live chat section contains committed result %q: %q", committed, managed)
 		}
 	}
 	for _, live := range []string{"INPUT_SENTINEL", "FOOTER_SENTINEL"} {
 		if !strings.Contains(managed, live) {
-			t.Fatalf("managed frame should retain live marker %q: %q", live, managed)
+			t.Fatalf("live chat section should retain live marker %q: %q", live, managed)
 		}
-	}
-
-	first := firstCmds[0]().(scrollbackPrintReadyMsg)
-	firstContent, ok := m.prepareScrollbackPrint(first.id)
-	if !ok {
-		t.Fatal("Bash print command has no current payload")
-	}
-	secondCmd := m.finishScrollbackPrint(first.id)
-	if secondCmd == nil {
-		t.Fatal("finishing Bash must start the queued Edit print")
-	}
-	second := secondCmd().(scrollbackPrintReadyMsg)
-	secondContent, ok := m.prepareScrollbackPrint(second.id)
-	if !ok {
-		t.Fatal("Edit print command has no current payload")
-	}
-	m.finishScrollbackPrint(second.id)
-
-	nativePayloads := firstContent + "\n" + secondContent
-	for _, result := range []string{"BASH_RESULT_SENTINEL", "EDIT_RESULT_SENTINEL"} {
-		if count := strings.Count(nativePayloads, result); count != 1 {
-			t.Fatalf("native payload count for %q = %d, want 1: %q", result, count, nativePayloads)
-		}
-	}
-	if strings.Index(nativePayloads, "BASH_RESULT_SENTINEL") > strings.Index(nativePayloads, "EDIT_RESULT_SENTINEL") {
-		t.Fatalf("native payload order is not Bash then Edit: %q", nativePayloads)
-	}
-	for _, live := range []string{"LIVE_EDIT_ACTIVITY", "INPUT_SENTINEL", "FOOTER_SENTINEL"} {
-		if strings.Contains(nativePayloads, live) {
-			t.Fatalf("native payload contains live-frame marker %q: %q", live, nativePayloads)
-		}
-	}
-	if strings.Contains(nativePayloads, strings.Repeat("\n", 8)) {
-		t.Fatalf("native payload contains live blank repaint space: %q", nativePayloads)
 	}
 }
 
