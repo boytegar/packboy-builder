@@ -183,7 +183,10 @@ func (c *chatView) onScroll(delta int) bool {
 	}
 	// Clamp to the viewport's own bounds by letting SetYOffset do the math,
 	// then read the actual offset back so scrollY agrees with the viewport.
-	c.buf.SetYOffset(c.scrollY + delta)
+	// delta is signed toward older content (wheel-up/pgup > 0), but a higher
+	// YOffset reveals newer content, so a scroll-back must decrement the
+	// offset — hence the negation.
+	c.buf.SetYOffset(c.scrollY - delta)
 	ny := c.buf.YOffset()
 	if ny == c.scrollY {
 		// No movement — already at a bound. If the user wheeled down to the

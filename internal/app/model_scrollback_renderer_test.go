@@ -102,6 +102,42 @@ func TestAppViewportRebuildReflows(t *testing.T) {
 	}
 }
 
+// Regression: scrolling must not be inverted. Wheel-up (delta > 0) reveals
+// OLDER content (offset decreases toward 0); wheel-down (delta < 0) reveals
+// NEWER content (offset increases toward the bottom). The original bug
+// applied scrollY+delta, so a wheel-down moved the conversation up instead
+// of down.
+func TestChatViewportScrollDirection(t *testing.T) {
+	c := newTestChatView(40, 5)
+	for i := 0; i < 60; i++ {
+		c.appendBlock(blockLine(i))
+	}
+	c.view("")
+	c.buf.GotoBottom()
+	bottom := c.buf.YOffset()
+
+	// First wheel-up exits follow, pinning scrollY to the bottom; a second
+	// notch then reveals older content (offset toward 0).
+	if !c.onScroll(scrollStep) {
+		t.Fatalf("first wheel-up did not clear follow mode")
+	}
+	if !c.onScroll(scrollStep) {
+		t.Fatalf("second wheel-up did not move the view")
+	}
+	up := c.buf.YOffset()
+	if up >= bottom {
+		t.Fatalf("wheel-up must reveal older content: offset %d -> %d",
+			bottom, up)
+	}
+	// Wheel-down reveals newer content again (offset grows back toward bottom).
+	if !c.onScroll(-scrollStep) {
+		t.Fatalf("wheel-down did not move the view")
+	}
+	if down := c.buf.YOffset(); down <= up {
+		t.Fatalf("wheel-down must reveal newer content: offset %d -> %d", up, down)
+	}
+}
+
 // renderLines strips trailing whitespace per line (the viewport pads each row to
 // its width), returning the trimmed visible content for assertions.
 func renderLines(out string) string {
