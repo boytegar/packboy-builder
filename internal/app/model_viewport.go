@@ -72,9 +72,10 @@ func chatViewer(width, height int) *chatView {
 	vp.SoftWrap = false          // blocks are already wrapped to Width at render time
 	vp.MouseWheelEnabled = false // wheel flows through scrollMsg into Update
 	return &chatView{
-		buf:    vp,
-		follow: true,
-		height: height,
+		buf:       vp,
+		follow:    true,
+		height:    height,
+		sizeDirty: true, // first render must flush the live tail into the viewport
 	}
 }
 
@@ -166,6 +167,21 @@ func (c *chatView) rebuildCache(blocks []string) {
 	}
 	c.renderedBlocks = blocks
 	c.dirty = true
+}
+
+// resetCache drops every cached committed block and the follow position so the
+// next frame renders only the live tail (used by /new: the conversation is
+// cleared but the committed-block cache would otherwise keep showing stale
+// content, and the old viewport frame could compare equal and be skipped by
+// the renderer — leaving a blank screen).
+func (c *chatView) resetCache() {
+	if c == nil {
+		return
+	}
+	c.renderedBlocks = nil
+	c.dirty = true
+	c.follow = true
+	c.scrollY = 0
 }
 
 // onScroll applies a user scroll delta. Returns true if the view actually

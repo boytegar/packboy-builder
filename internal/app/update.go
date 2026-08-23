@@ -181,6 +181,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		token := m.userInput.Provider.SetStatusMessage(status)
 		return m, kit.StatusTimer(4*time.Second, token)
+	case input.NewSessionRequestMsg:
+		// /new: wipe state for a fresh session and re-arm the startup splash
+		// so it looks exactly like a fresh CLI launch. The /new command handler
+		// already persisted + cleared screen/conv; here we blank session ID/name,
+		// task storage, and re-show the welcome banner.
+		m.applyNewSession()
+		return m, nil
 	case input.MissionRefinedMsg:
 		// The /autopilot Mission editor's refined text arrived; hand it to the
 		// panel to replace the draft (or surface an error under the editor).

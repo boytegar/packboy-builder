@@ -162,6 +162,12 @@ func RenderAutopilotMark(note string) string {
 		toolResultStyle.Render(" · "+note) + "\n"
 }
 
+// UserMsgPadding is the blank-line count appended after the rendered user
+// turn so it doesn't visually collide with the next block (tool result,
+// assistant reply, or follow-up user message). Top spacing already comes from
+// view.go's leading "\n" on non-toolResult messages; this owns the bottom.
+const UserMsgPadding = 1
+
 // RenderUserMessage renders a user message with prompt and optional images.
 func RenderUserMessage(content, displayContent string, images []core.Image, mdRenderer *MDRenderer, width int) string {
 	var sb strings.Builder
@@ -176,6 +182,7 @@ func RenderUserMessage(content, displayContent string, images []core.Image, mdRe
 			prompt,
 			userMsgStyle.Render(styleInlineImageTokens(displayContent)),
 		) + "\n")
+		sb.WriteString(strings.Repeat("\n", UserMsgPadding))
 		return sb.String()
 	}
 
@@ -191,8 +198,13 @@ func RenderUserMessage(content, displayContent string, images []core.Image, mdRe
 		} else {
 			sb.WriteString(prompt + imageLabel + "\n")
 		}
-	} else if displayContent != "" {
+		sb.WriteString(strings.Repeat("\n", UserMsgPadding))
+		return sb.String()
+	}
+
+	if displayContent != "" {
 		sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, prompt, userMsgStyle.Render(displayContent)) + "\n")
+		sb.WriteString(strings.Repeat("\n", UserMsgPadding))
 	}
 
 	return sb.String()

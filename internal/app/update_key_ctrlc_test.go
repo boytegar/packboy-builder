@@ -9,6 +9,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/app/conv"
 	"github.com/boytegar/packboy-builder/internal/core"
 	"github.com/boytegar/packboy-builder/internal/hook"
+	"github.com/boytegar/packboy-builder/internal/session"
 	"github.com/boytegar/packboy-builder/internal/setting"
 	"github.com/boytegar/packboy-builder/internal/todo"
 )
@@ -25,6 +26,7 @@ func modelForCtrlC(t *testing.T) *model {
 			Agent:   &agent.Session{},
 			Hook:    hook.NewEngine(data, "test-session", t.TempDir(), ""),
 			Setting: setting.New(data),
+			Session: &session.Setup{},
 			Tracker: todo.NewStore(),
 		},
 	}
@@ -39,15 +41,24 @@ func isQuit(t *testing.T, cmd tea.Cmd) bool {
 	return ok
 }
 
-func TestCtrlCQuitsWhenConversationIsEmpty(t *testing.T) {
+func TestCtrlCEmptyConversationClearsThenQuitsOnSecondTap(t *testing.T) {
 	m := modelForCtrlC(t)
 
 	cmd, handled := m.handleTextareaShortcut(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if !handled {
 		t.Fatal("Ctrl+C was not handled")
 	}
+	if isQuit(t, cmd) {
+		t.Fatal("first Ctrl+C on an empty conversation should clear, not quit")
+	}
+
+	// Second tap inside the double-tap window quits.
+	cmd, handled = m.handleTextareaShortcut(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if !handled {
+		t.Fatal("second Ctrl+C was not handled")
+	}
 	if !isQuit(t, cmd) {
-		t.Fatal("Ctrl+C on an empty conversation should quit, not clear")
+		t.Fatal("Ctrl+C twice inside the window should quit")
 	}
 }
 
@@ -66,8 +77,8 @@ func TestCtrlCClearsBeforeQuittingWhenConversationHasMessages(t *testing.T) {
 		t.Fatalf("conv messages = %d, want 0 after clear", len(m.conv.Messages))
 	}
 
-	// The conversation is empty now, so the follow-up tap quits without needing
-	// to land inside the double-tap window.
+	// The conversation is empty now; the follow-up tap quits because it lands
+	// inside the double-tap window.
 	cmd, handled = m.handleTextareaShortcut(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if !handled {
 		t.Fatal("second Ctrl+C was not handled")

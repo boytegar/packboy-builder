@@ -250,10 +250,11 @@ Keybindings:
   Up/Down      Navigate input history
   Esc          Stop AI response
   Ctrl+T       Toggle task list display
-  Ctrl+C       Clear input / Quit
+  Ctrl+C       Start a new session (press twice to quit)
 
 Slash Commands:
   /models      Select model and manage provider connections
+  /new         Start a fresh session (persists the current one)
   /clear       Clear chat history
   /help        Show help
 

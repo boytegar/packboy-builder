@@ -66,14 +66,56 @@ func (m *model) viewString() (string, *tea.Cursor) {
 	separator := conv.SeparatorStyle.Render(strings.Repeat("─", m.env.Width))
 	trackerView := m.renderTrackerList()
 
-	if hasOverlay { // docked modal (Question / Approval)
-		trackerPrefix := ""
-		if trackerView != "" {
-			trackerPrefix = "\n" + strings.TrimSuffix(trackerView, "\n") + "\n"
-		}
-		return trackerPrefix + separator + "\n" + ov.Render(), nil
+	if hasOverlay { // docked modal (Question / Approval / Secret)
+		return m.renderDockedModalView(separator, trackerView, ov), nil
 	}
 	return m.renderNormalView(separator, trackerView)
+}
+
+// renderDockedModalView composes the layout shown while a docked modal owns
+// the keyboard: chat content stays visible above, the modal docks between the
+// chat section and the footer, and the composer + status line stay pinned to
+// the bottom rows. The modal gains its affordance by interrupting the read
+// flow, not by replacing it — the user's scrollback context remains visible.
+//
+// The modal's bottom separator comes from the modal itself (its Render ends
+// with a ┄ row); view adds the top separator to slice it off from chat.
+// The cursor is nil here: keyboard is routed to the modal, so the composer
+// must not draw an editing cursor.
+func (m *model) renderDockedModalView(separator, trackerView string, ov overlayPanel) string {
+	footer, _ := m.renderFooter(separator)
+	modalBody := ov.Render()
+	modalHeight := strings.Count(modalBody, "\n") + 1
+	// +1 for the blank row + top separator line above the modal
+	footerHeight := strings.Count(footer, "\n")
+
+	chatHeight := m.env.Height - footerHeight - modalHeight - 2
+	if chatHeight < 0 {
+		chatHeight = 0
+	}
+
+	if m.chat == nil {
+		m.chat = chatViewer(m.env.Width, chatHeight)
+	} else {
+		m.chat.syncSizeIfNeeded(m.env.Width, chatHeight)
+	}
+
+	activeContent := conv.RenderActiveContent(m.messageRenderParams())
+	live := m.renderChatSection(activeContent, trackerView)
+	chatSection := m.chat.view(live)
+	// Strip trailing newline so the top separator doesn't leave an extra blank.
+	chatSection = strings.TrimRight(chatSection, "\n")
+
+	var b strings.Builder
+	if chatSection != "" {
+		b.WriteString(chatSection)
+		b.WriteString("\n")
+	}
+	b.WriteString(separator)
+	b.WriteString("\n")
+	b.WriteString(modalBody)
+	b.WriteString(footer)
+	return b.String()
 }
 
 // isDockedModal reports whether the active overlay docks above the input area
