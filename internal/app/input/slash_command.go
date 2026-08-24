@@ -93,6 +93,10 @@ type SlashCommandEnv struct {
 	RunSelfLearnDemo        func()
 	SetActivePersona        func(name string) error
 	RenameSession           func(name string) error
+	// NewSession wipes the current conversation model-time state, persists the
+	// old session, and re-arms the fresh-launch splash so the app looks like a
+	// newly started CLI. See model_session.go's newSession.
+	NewSession func() tea.Cmd
 }
 
 type SlashCommandController struct {
@@ -107,6 +111,7 @@ func builtinCommandHandlers() map[string]slashCommandHandler {
 	return map[string]slashCommandHandler{
 		"models":         (*SlashCommandController).handleModelCommand,
 		"clear":          (*SlashCommandController).handleClearCommand,
+		"new":            (*SlashCommandController).handleNewCommand,
 		"fork":           (*SlashCommandController).handleForkCommand,
 		"resume":         (*SlashCommandController).handleResumeCommand,
 		"help":           (*SlashCommandController).handleHelpCommand,
@@ -325,6 +330,44 @@ func (c *SlashCommandController) handleClearCommand(_ context.Context, _ string)
 	}
 	return "", tea.Sequence(cmds...), nil
 }
+
+func (c *SlashCommandController) handleNewCommand(_ context.Context, _ string) (string, tea.Cmd, error) {
+	// Best-effort persist the old session (so it stays resumable) before wiping
+	// state and minting a fresh session ID.
+	if c.env.Session.ID() != "" {
+		_ = c.env.PersistSession()
+	}
+	c.env.ResetAgentSession()
+	c.env.Conversation.Stream.Stop()
+	if c.env.Tool.Cancel != nil {
+		c.env.Tool.Cancel()
+	}
+	c.env.Tool.Reset()
+	c.env.Conversation.Clear()
+	c.env.ResetTokens()
+	c.env.Tracker.Reset()
+	c.env.ResetCronQueue()
+	fs.ResetFileViews()
+	// Same full-screen wipe as /clear so the user sees a truly blank slate.
+	fullClear := xansi.CursorHomePosition + xansi.EraseEntireScreen + xansi.EraseEntireDisplay
+	cmds := []tea.Cmd{tea.Raw(fullClear), tea.ClearScreen}
+	if os.Getenv("TMUX") != "" {
+		cmds = append(cmds, func() tea.Msg {
+			_ = exec.Command("tmux", "clear-history").Run()
+			return nil
+		})
+	}
+	// Signal the app layer to fully reset session state (ID, name, splash) via
+	// a tea.Msg that arrives on the model's Update loop.
+	return "", tea.Sequence(append(cmds, func() tea.Msg {
+		return NewSessionRequestMsg{}
+	})...), nil
+}
+
+// NewSessionRequestMsg is emitted by /new to ask the model layer to mint a
+// fresh session: persist the old one (best-effort), blank out session ID and
+// name, reset token counters + task storage, then re-arm the startup splash.
+type NewSessionRequestMsg struct{}
 
 func (c *SlashCommandController) handleForkCommand(_ context.Context, _ string) (string, tea.Cmd, error) {
 	if len(c.env.Conversation.Messages) == 0 {

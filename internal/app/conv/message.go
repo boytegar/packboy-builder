@@ -90,6 +90,12 @@ var (
 	ThinkingStyle = lipgloss.NewStyle().
 			Foreground(kit.CurrentTheme.Muted)
 
+	// streamingChipStyle is the live "⟳ thinking" tag appended to the active
+	// streaming message. It recedes to the muted thinking tone (it's chrome, not
+	// content) while the animated spinner glyph keeps it clearly live.
+	streamingChipStyle = lipgloss.NewStyle().
+				Foreground(kit.CurrentTheme.Muted)
+
 	systemMsgStyle = lipgloss.NewStyle().
 			Foreground(kit.CurrentTheme.TextDim).
 			PaddingLeft(2)
@@ -162,6 +168,12 @@ func RenderAutopilotMark(note string) string {
 		toolResultStyle.Render(" · "+note) + "\n"
 }
 
+// UserMsgPadding is the blank-line count appended after the rendered user
+// turn so it doesn't visually collide with the next block (tool result,
+// assistant reply, or follow-up user message). Top spacing already comes from
+// view.go's leading "\n" on non-toolResult messages; this owns the bottom.
+const UserMsgPadding = 1
+
 // RenderUserMessage renders a user message with prompt and optional images.
 func RenderUserMessage(content, displayContent string, images []core.Image, mdRenderer *MDRenderer, width int) string {
 	var sb strings.Builder
@@ -169,13 +181,18 @@ func RenderUserMessage(content, displayContent string, images []core.Image, mdRe
 	if displayContent == "" {
 		displayContent = content
 	}
+	// Wrap the body at (width - prompt) in every branch, keeping continuation
+	// rows under the prompt's hanging indent so a long message never overflows
+	// the right edge of the layout.
+	bodyWidth := max(1, width-lipgloss.Width(InputPrompt))
 
 	if len(images) > 0 && core.InlineImageTokenRe.MatchString(displayContent) {
 		sb.WriteString(lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			prompt,
-			userMsgStyle.Render(styleInlineImageTokens(displayContent)),
+			userMsgStyle.Width(bodyWidth).Render(styleInlineImageTokens(displayContent)),
 		) + "\n")
+		sb.WriteString(strings.Repeat("\n", UserMsgPadding))
 		return sb.String()
 	}
 
@@ -187,12 +204,21 @@ func RenderUserMessage(content, displayContent string, images []core.Image, mdRe
 		}
 		imageLabel := strings.Join(imgParts, " ")
 		if displayContent != "" {
-			sb.WriteString(prompt + imageLabel + " " + userMsgStyle.Render(displayContent) + "\n")
+			sb.WriteString(prompt + imageLabel + " " + userMsgStyle.Width(bodyWidth).Render(displayContent) + "\n")
 		} else {
 			sb.WriteString(prompt + imageLabel + "\n")
 		}
-	} else if displayContent != "" {
-		sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, prompt, userMsgStyle.Render(displayContent)) + "\n")
+		sb.WriteString(strings.Repeat("\n", UserMsgPadding))
+		return sb.String()
+	}
+
+	if displayContent != "" {
+		// Wrap the user body at bodyWidth (computed above), indenting
+		// continuation rows under the first text column so the prompt's hanging
+		// indent reads identical to the live composer.
+		body := userMsgStyle.Width(bodyWidth).Render(displayContent)
+		sb.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, prompt, body) + "\n")
+		sb.WriteString(strings.Repeat("\n", UserMsgPadding))
 	}
 
 	return sb.String()
@@ -226,6 +252,12 @@ type AssistantParams struct {
 	ThinkingCommittedLen int
 	BulletEmitted        bool
 	ThinkingEmitted      bool
+
+	// Frame is the monotonic frame count from the spinner clock (0-based). When
+	// >0 and the message is streaming, the leading thinking marker animates
+	// through the shared star frames; when it stops the marker settles back to
+	// the static glyph.
+	Frame int
 }
 
 // InterruptedMarker is the literal suffix MarkLastInterrupted appends to an
@@ -253,27 +285,35 @@ func contentGutter(showBullet bool) string {
 // thinkingGutter returns the 2-column lead for a reasoning block: the muted "✦"
 // marker for the turn's first thinking block, or a blank continuation gutter for
 // blocks committed after it, so progressively-committed reasoning aligns under
-// the single leading glyph.
-func thinkingGutter(showIcon bool) string {
-	if showIcon {
-		return ThinkingStyle.Render("✦ ")
+// the single leading glyph. When frame >= 0 the marker is animated through the
+// shared star spinner frames so the live thinking block reads as in-motion.
+func thinkingGutter(showIcon bool, frame int) string {
+	if !showIcon {
+		return continuationGutter
 	}
-	return continuationGutter
+	glyph := "✦"
+	if frame > 0 {
+		frames := kit.StarSpinnerFrames
+		glyph = frames[frame%len(frames)]
+	}
+	return ThinkingStyle.Render(glyph + " ")
 }
 
 // renderThinkingBlock renders reasoning text as the muted "✦" block shared by
 // the live view and the scrollback commit path. The glyph and text both stay
 // muted, matching the status-bar thinking indicator — no hue. showIcon leads the
 // block with the "✦ " marker (the turn's first thinking) or a blank continuation
-// gutter for blocks committed after it. With md set the reasoning is laid out as
-// markdown (then re-toned muted); without it, a plain muted wrap — the live
-// streaming tail passes nil to stay cheap, matching the content tail.
-func renderThinkingBlock(thinking string, showIcon bool, width int, md *MDRenderer) string {
+// gutter for blocks committed after it. frame > 0 animates the marker through
+// the star frames while streaming; frame <= 0 keeps it static. With md set the
+// reasoning is laid out as markdown (then re-toned muted); without it, a plain
+// muted wrap — the live streaming tail passes nil to stay cheap, matching the
+// content tail.
+func renderThinkingBlock(thinking string, showIcon bool, frame int, width int, md *MDRenderer) string {
 	body := mutedThinkingBody(thinking, width, md)
 	if strings.TrimSpace(xansi.Strip(body)) == "" {
 		return ""
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, thinkingGutter(showIcon), body)
+	return lipgloss.JoinHorizontal(lipgloss.Top, thinkingGutter(showIcon, frame), body)
 }
 
 // mutedThinkingBody lays reasoning out as markdown when a renderer is available,
@@ -325,7 +365,7 @@ func RenderCommittedThinkingBlock(thinking string, showIcon bool, width int, md 
 	if strings.TrimSpace(thinking) == "" {
 		return ""
 	}
-	return renderThinkingBlock(thinking, showIcon, width, md)
+	return renderThinkingBlock(thinking, showIcon, 0, width, md)
 }
 
 // RenderCommittedContentBlock renders one or more completed markdown blocks of
@@ -377,7 +417,11 @@ func RenderAssistantMessage(params AssistantParams) string {
 		if params.StreamActive && params.IsLast {
 			thinkMD = nil
 		}
-		sb.WriteString(renderThinkingBlock(params.Thinking, !params.ThinkingEmitted, params.Width, thinkMD) + "\n\n")
+		frame := 0
+		if params.StreamActive && params.IsLast {
+			frame = params.Frame
+		}
+		sb.WriteString(renderThinkingBlock(params.Thinking, !params.ThinkingEmitted, frame, params.Width, thinkMD) + "\n\n")
 	}
 
 	content := formatAssistantContent(params)

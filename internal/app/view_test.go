@@ -9,10 +9,12 @@ import (
 
 	"github.com/boytegar/packboy-builder/internal/app/conv"
 	"github.com/boytegar/packboy-builder/internal/app/input"
+	"github.com/boytegar/packboy-builder/internal/core"
 	"github.com/boytegar/packboy-builder/internal/llm"
 	"github.com/boytegar/packboy-builder/internal/setting"
 	"github.com/boytegar/packboy-builder/internal/subagent"
 	"github.com/boytegar/packboy-builder/internal/todo"
+	"github.com/boytegar/packboy-builder/internal/tool"
 )
 
 // The composer prints the "❭ " prompt once, on the first row, while inputCursor
@@ -110,6 +112,74 @@ func TestTailLines(t *testing.T) {
 // read as one continuous flow from committed scrollback down to the
 // composer. With a short live tail the frame must be exactly chat+footer
 // (well under terminal height), not chat+gap+footer (exactly height).
+// A docked modal (Question / Approval) docks between the chat section and the
+// footer input: the conversation stays visible above, the composer stays below
+// (keyboard is routed to the modal, not the textarea). Previously the modal
+// replaced the whole frame, leaving chat invisible and input gone — the UI
+// "looked like its own thing, floating above".
+func TestDockedModalKeepsChatAndFooter(t *testing.T) {
+	const width, height = 80, 40
+	m := &model{
+		env:       env{Width: width, Height: height, Ready: true},
+		conv:      conv.NewModel(width),
+		userInput: input.New("", width, nil, input.SelectorDeps{}),
+		services: services{
+			Setting:  setting.Default(),
+			LLM:      llm.Default(),
+			Subagent: subagent.NewRegistry(),
+			Tracker:  todo.NewStore(),
+		},
+	}
+	m.userInput.Textarea.SetWidth(width - 4 - 2)
+
+	// Give the conversation something visible in the live tail.
+	m.conv.Messages = append(m.conv.Messages, core.ChatMessage{
+		Role:    core.RoleAssistant,
+		Content: "chat tail must stay visible",
+	})
+
+	// Show the question modal (docked overlay).
+	m.conv.Modal.Question.Show(&tool.QuestionRequest{
+		ID: "ask-1",
+		Questions: []tool.Question{{
+			Question: "Which version?",
+			Header:   "Choose",
+			Options: []tool.QuestionOption{
+				{Label: "Patch"},
+				{Label: "Minor"},
+			},
+		}},
+	}, width)
+
+	view, cursor := m.viewString()
+	plain := ansi.Strip(view)
+
+	// Footer (composer + status) must survive at the bottom.
+	if !strings.Contains(plain, conv.InputPrompt) {
+		t.Fatalf("docked modal frame must still include the composer prompt:\n%s", view)
+	}
+
+	// The modal body must appear between the chat content and the composer.
+	chatIdx := strings.Index(plain, "chat tail must stay visible")
+	modalIdx := strings.Index(plain, "Which version?")
+	inputIdx := strings.Index(plain, conv.InputPrompt)
+	if !(chatIdx >= 0 && modalIdx > chatIdx && inputIdx > modalIdx) {
+		t.Fatalf("layout order must be chat < modal < input, got chat=%d modal=%d input=%d", chatIdx, modalIdx, inputIdx)
+	}
+
+	// Keyboard belongs to the modal — no textarea cursor.
+	if cursor != nil {
+		t.Fatal("docked modal frame must not emit a textarea cursor (modal owns the keyboard)")
+	}
+
+	// Frame still fits the terminal height (no overflow when chat + modal + footer
+	// exceed available rows — chat truncates, footer pinned).
+	lines := strings.Count(view, "\n") + 1
+	if lines > height {
+		t.Fatalf("docked modal frame is %d lines, exceeds terminal height %d", lines, height)
+	}
+}
+
 func TestRenderNormalViewAnchorsFooterToTerminalBottom(t *testing.T) {
 	const width, height = 80, 40
 	m := &model{
