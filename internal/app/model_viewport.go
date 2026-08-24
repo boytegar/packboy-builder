@@ -61,6 +61,14 @@ type chatView struct {
 	// from the event loop, and so Update can react to content growth
 	// without fighting the viewport.
 	scrollY int
+	// lastLive is the live-tail string rendered into the viewport last frame.
+	// Following, the live tail changes every frame (spinners, streaming,
+	// tracker) without setting dirty, so this fingerprint tells ensureSynced a
+	// content change occurred without a full SetContent re-parse when nothing
+	// visible changed. The offset must re-pin to the true bottom whenever the
+	// tail grows — otherwise a wheel-up after arriving at the bottom captures a
+	// stale yOffset and starts scrolling mid-screen.
+	lastLive string
 	// height is the chat pane height in rows; set on resize and used by
 	// the banner logic (whether it has room to overlap content).
 	height int
@@ -140,8 +148,27 @@ func (c *chatView) appendBlock(block string) {
 // ensureSynced pushes the cached content into the viewport if the block cache
 // changed since the last push. Follow mode re-pins to bottom so streaming
 // commits scroll the view forward; otherwise the user's offset is preserved.
+//
+// The live tail (spinners, streaming chunks, tracker) grows every frame without
+// setting dirty, so a pure "dirty or return" check leaves yOffset frozen at a
+// half-grown bottom. While following, any live-tail change is detected by
+// fingerprint (lastLive != current) and triggers just a re-pin to the true
+// bottom + a SetContent — that is the fix for "at the bottom yet wheel-up
+// starts from mid-screen". SetContent is skipped entirely when nothing visible
+// changed (static frame). Away from follow the user's offset is preserved.
 func (c *chatView) ensureSynced(live string) {
 	if c == nil {
+		return
+	}
+	if c.follow && !c.dirty && !c.sizeDirty {
+		// Live tail changed without a dirty commit (spinners / streaming /
+		// tracker). Re-pin to the true bottom so a wheel-up that exits follow
+		// anchors to the real content height, not a stale yOffset.
+		if live != c.lastLive {
+			c.lastLive = live
+			c.buf.SetContent(c.fullContent(live))
+			c.buf.GotoBottom()
+		}
 		return
 	}
 	if !c.dirty && !c.sizeDirty {
@@ -149,6 +176,7 @@ func (c *chatView) ensureSynced(live string) {
 	}
 	c.dirty = false
 	c.sizeDirty = false
+	c.lastLive = live
 	c.buf.SetContent(c.fullContent(live))
 	if c.follow {
 		c.buf.GotoBottom()

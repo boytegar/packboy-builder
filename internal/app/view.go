@@ -480,6 +480,7 @@ func (m model) messageRenderParams() conv.RenderContext {
 		// Per-tick UI state
 		SpinnerView:  m.conv.Spinner.View(),
 		Blink:        m.conv.Spinner.Frame(),
+		Frame:        m.conv.Spinner.Frame(),
 		ModelName:    m.env.GetModelDisplayName(),
 		InputTokens:  m.env.InputTokens,
 		OutputTokens: m.env.OutputTokens,

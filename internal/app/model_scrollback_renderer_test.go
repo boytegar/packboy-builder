@@ -138,6 +138,58 @@ func TestChatViewportScrollDirection(t *testing.T) {
 	}
 }
 
+// Regression: the reported bug — the UI sits flush at the bottom, but the first
+// wheel-up starts the scroll mid-screen. Root cause: while following, the live
+// tail grows every frame (spinners / streaming / tracker) without setting dirty,
+// so the viewport never re-pinned to the true bottom. yOffset stayed frozen at a
+// half-grown value; the wheel-up that exits follow then captured that stale
+// offset as the scroll start. ensureSynced now detects the content change by
+// fingerprint while following and re-pins to the real bottom first.
+func TestChatViewportScrollFromBottomAfterLiveGrowth(t *testing.T) {
+	c := newTestChatView(40, 5)
+	for i := 0; i < 20; i++ {
+		c.appendBlock(blockLine(i))
+	}
+	c.view("live-head\n")
+	if !c.follow {
+		t.Fatalf("expected follow mode after initial sync")
+	}
+
+	// Streaming: live tail grows frame-over-frame without any dirty commit
+	// (nothing appended to the block cache). The old code left yOffset frozen.
+	grown := ""
+	for i := 0; i < 60; i++ {
+		grown += "stream-line\n"
+	}
+	c.view(grown)
+
+	// While following, yOffset must have tracked the grown content's bottom, so
+	// the wheel-up that exits follow anchors to the true bottom, not mid-pane.
+	trueBottom := c.buf.YOffset()
+	if c.follow {
+		if trueBottom == 0 {
+			t.Fatalf("setup: grown live did not bind to bottom")
+		}
+	} else {
+		t.Fatalf("growth while following must not leave follow mode")
+	}
+	if !c.onScroll(scrollStep) {
+		t.Fatalf("first wheel-up did not clear follow mode")
+	}
+	if got, want := c.scrollY, trueBottom; got != want {
+		t.Fatalf("scrollY after exiting follow = %d, want the true bottom %d - "+
+			"a stale yOffset makes the scroll start mid-screen", got, want)
+	}
+	// One more notch must reveal older content (offset decreases).
+	before := c.buf.YOffset()
+	if !c.onScroll(scrollStep) {
+		t.Fatalf("second wheel-up did not move the view")
+	}
+	if after := c.buf.YOffset(); after >= before {
+		t.Fatalf("wheel-up should reveal older content, got %d -> %d", before, after)
+	}
+}
+
 // renderLines strips trailing whitespace per line (the viewport pads each row to
 // its width), returning the trimmed visible content for assertions.
 func renderLines(out string) string {

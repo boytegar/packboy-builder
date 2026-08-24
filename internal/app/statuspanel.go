@@ -22,7 +22,7 @@ import (
 const maxStatusRows = 10
 
 // renderStatusOverview assembles the LSPs · Skills · MCPs columns into one
-// bordered row. Returns "" when zero configured items exist across all three
+// borderless row. Returns "" when zero configured items exist across all three
 // so a fresh blank session stays clean.
 func (m model) renderStatusOverview() string {
 	viewport := maxInt(m.env.Width-4, 1)
@@ -53,9 +53,9 @@ func (m model) renderStatusOverview() string {
 		return ""
 	}
 
-	return kit.SelectorBorderStyle().
-		Width(maxInt(viewport, 20)).
-		Render(inner)
+	// Border-free: return the joined content only, so LSPs · Skills · MCPs stay
+	// visible without the framed box around them.
+	return inner
 }
 
 // lspStatusColumn renders the configured/active LSP servers. Each row carries
