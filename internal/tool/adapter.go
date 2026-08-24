@@ -108,7 +108,7 @@ func AdaptToolRegistry(schemas []core.ToolSchema, cwd func() string, opts ...Ada
 			adapted = append(adapted, &toolAdapter{inner: t, schema: schema, cwd: cwd, askFn: cfg.askFn, messagesGetter: cfg.messagesGetter, activityFn: cfg.activityFn, promptResponder: cfg.promptResponder, skillTracker: cfg.skillTracker})
 		}
 	}
-	
+
 	// Inject Agent tool if executor provided
 	if cfg.agentExecutor != nil {
 		if agentTool, ok := Get("Agent"); ok {
@@ -117,7 +117,7 @@ func AdaptToolRegistry(schemas []core.ToolSchema, cwd func() string, opts ...Ada
 			}
 		}
 	}
-	
+
 	return core.NewTools(adapted...)
 }
 

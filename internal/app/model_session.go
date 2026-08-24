@@ -245,3 +245,37 @@ func (m *model) renameSession(name string) error {
 	m.env.SessionName = name
 	return m.PersistSession()
 }
+
+// applyNewSession mints a fresh session after /new (or a Ctrl+C on an idle
+// conversation). The /new command handler already persisted the old session,
+// cleared the conversation, stopped the agent and wiped tokens; this blanks the
+// remaining per-session state so the next turn starts under a new ID, and
+// re-arms the startup splash so the screen looks exactly like a fresh launch.
+func (m *model) applyNewSession() {
+	// Reset the session identity so the next PersistSession mints a new ID
+	// (NormalizeMetadata only assigns one when ID == ""). Also drop the custom
+	// name so /name doesn't leak into the new session.
+	m.services.Session.SetID("")
+	m.env.SessionName = ""
+	// initTaskStorage early-returns while a storage dir is set, so clear it and
+	// let the next InitTaskStorage (on first save after a turn) re-point task
+	// snapshots at the new session's directory.
+	m.services.Tracker.SetStorageDir("")
+	// Reset per-session autopilot state so the new session starts from the
+	// settings default rather than carrying the closed session's mission/steers.
+	if snap := m.services.Setting.Snapshot(); snap != nil {
+		m.env.AutoPilot = snap.AutoPilot.Clone()
+	}
+	m.env.ResetTokens()
+	// Drop the committed-block viewport cache so the next frame renders only
+	// the live tail (welcome banner + status). Without this, the old frame's
+	// cached blocks persist and the renderer can skip the redraw after the
+	// /new screen erase — leaving a blank screen.
+	if m.chat != nil {
+		m.chat.resetCache()
+	}
+	// Re-arm the welcome splash + status panel (same as run.go) and reset its
+	// horizontal pan so it renders centered at the startup offset.
+	m.welcomePending = true
+	m.statusPanelScrollX = 0
+}

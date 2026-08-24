@@ -111,10 +111,10 @@ func NewExecutor(llmProvider llm.Provider, cwd string, parentModelID string, hoo
 	return &Executor{
 		provider:          llmProvider,
 		maxRecursionDepth: 5, // default max depth
-		registry:      Default(),
-		cwd:           cwd,
-		parentModelID: parentModelID,
-		hooks:         hookEngine,
+		registry:          Default(),
+		cwd:               cwd,
+		parentModelID:     parentModelID,
+		hooks:             hookEngine,
 	}
 }
 
@@ -479,14 +479,14 @@ func (e *Executor) buildAgent(ctx context.Context, run *preparedRun, onToolExec 
 	if run.req.OnQuestion != nil {
 		adaptOpts = append(adaptOpts, tool.WithAskUser(tool.AskUserFunc(run.req.OnQuestion)))
 	}
-	
+
 	// For recursive subagent support: inject Agent tool with child executor
 	// Only in agent mode (depth > 0) with PermissionAuto/Bypass permission
 	if e.recursionDepth > 0 && (rc.permMode == PermissionAuto || rc.permMode == PermissionBypass) && e.maxRecursionDepth > 0 && e.recursionDepth < e.maxRecursionDepth {
 		childExecutor := e.createChildExecutor()
 		adaptOpts = append(adaptOpts, tool.WithAgentExecutor(NewExecutorAdapter(childExecutor)))
 	}
-	
+
 	tools := tool.AdaptToolRegistry(schemas, func() string { return agentCwd }, adaptOpts...)
 
 	// Add MCP tool executors

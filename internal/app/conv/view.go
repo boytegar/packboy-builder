@@ -40,6 +40,7 @@ type RenderContext struct {
 	// ── Per-tick UI state ───────────────────────────────────────
 	SpinnerView  string
 	Blink        int
+	Frame        int
 	ModelName    string
 	InputTokens  int
 	OutputTokens int
@@ -233,6 +234,7 @@ func renderAssistantWithTools(p RenderContext, msg core.ChatMessage, idx int, is
 		ThinkingCommittedLen: msg.ThinkingCommittedLen,
 		BulletEmitted:        msg.BulletEmitted,
 		ThinkingEmitted:      msg.ThinkingEmitted,
+		Frame:                p.Frame,
 	})
 
 	if len(msg.ToolCalls) == 0 {
