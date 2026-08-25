@@ -36,7 +36,7 @@ func (e *recordingExecutor) ResolveAgentSelection(name string) (tool.AgentConfig
 	}
 	return tool.AgentConfigInfo{Name: name, PermissionMode: "default"}, e.resolvedConfig, true
 }
-func (e *recordingExecutor) GetParentModelID() string { return "parent-model" }
+func (e *recordingExecutor) GetParentModelID() string                              { return "parent-model" }
 func (e *recordingExecutor) SwapRunModelByName(_ context.Context, _, _ string) int { return 0 }
 
 func TestAgentToolUsesOptionalName(t *testing.T) {
