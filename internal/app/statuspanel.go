@@ -138,6 +138,14 @@ func (m model) mcpStatusColumn(maxWidth int) string {
 		return ""
 	}
 
+	// List() walks the configs map, so call order is nondeterministic across
+	// frames. Sort by name for a stable column (matches lspStatusColumn) —
+	// without it the MCP rows jitter as the panel re-renders live each frame
+	// while LSPs/Skills stay put.
+	slices.SortFunc(servers, func(a, b mcp.Server) int {
+		return strings.Compare(a.Config.Name, b.Config.Name)
+	})
+
 	title := "MCPs"
 	rows := make([]string, 0, len(servers))
 	for i, srv := range servers {

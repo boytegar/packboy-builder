@@ -19,12 +19,24 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
+	"charm.land/lipgloss/v2"
+
+	"github.com/boytegar/packboy-builder/internal/app/kit"
 )
 
 // scrollStep is the number of viewport rows one wheel notch or PgUp/PgDn
 // scrolls. A throwback to terminal paging: roughly a third of a typical
 // 40-row screen.
 const scrollStep = 12
+
+// chatMaxLinesDefault caps the rendered conversation scrollback kept in the
+// chat viewport, in physical terminal lines (at the current width). Once the
+// committed blocks plus the live tail exceed it, the oldest lines are dropped
+// from the viewport so a long session doesn't grow it without bound — keeping
+// the scrollbar thumb usable and scroll length short. Dropped lines are not
+// recoverable in the viewport; the full transcript still lives in session
+// persistence.
+const chatMaxLinesDefault = 500
 
 // scrollMsg is sent by the OnMouse wheel handler (which runs on the event
 // loop) into the regular Update loop. The handler never mutates model
@@ -34,6 +46,29 @@ type scrollMsg struct{ delta int }
 
 // followMsg forces the chat back into follow mode (scroll to bottom).
 type followMsg struct{}
+
+// scrollbarAction is the logical scroll a mouse press/drag on the thin right
+// scrollbar gutter requests. The OnMouse handler packages one per press/drag
+// event; Update resolves it into a scrollY jump and (dis)engages drag state.
+// Enumerating logical actions (rather than raw columns) keeps the event loop
+// free of viewport math — it never reads scroll state off the event thread.
+type scrollbarAction int
+
+const (
+	scrollbarTop        scrollbarAction = iota // click above the thumb (page up)
+	scrollbarBottom                            // click below the thumb (page down)
+	scrollbarThumbStart                        // press on the thumb: begin thumb-drag
+	scrollbarThumbDrag                         // thumb-drag: jump to the drag's Y ratio
+	scrollbarThumbEnd                          // release the thumb: end the drag
+)
+
+// scrollbarJumpMsg is sent by the OnMouse press/drag handler for a pointer
+// event on the scrollbar gutter; it carries a logical action plus (for a drag)
+// the pointer row so Update can map it to a scroll position.
+type scrollbarJumpMsg struct {
+	action scrollbarAction
+	row    int // viewport-relative pointer row for thumb drags
+}
 
 // chatView is the model-owned render cache + scroll controller behind the
 // chat viewport. It is a pointer on the model (like flushState) because
@@ -72,6 +107,13 @@ type chatView struct {
 	// height is the chat pane height in rows; set on resize and used by
 	// the banner logic (whether it has room to overlap content).
 	height int
+	// maxLines caps the rendered scrollback in physical lines (see
+	// chatMaxLinesDefault). 0 disables the cap.
+	maxLines int
+	// dragRow is the viewport-relative pointer row captured when a thumb-drag
+	// starts, so each drag event maps pointer row → scroll position against a
+	// stable thumb anchor. Set only while a drag is in progress.
+	dragRow int
 }
 
 // chatViewer wires the initial viewport with auto-follow on.
@@ -79,10 +121,16 @@ func chatViewer(width, height int) *chatView {
 	vp := viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
 	vp.SoftWrap = false          // blocks are already wrapped to Width at render time
 	vp.MouseWheelEnabled = false // wheel flows through scrollMsg into Update
+	// The right scrollbar is drawn as an overlay on the last column by
+	// renderScrollbarColumn() so the content width stays full-width while the
+	// bar is visible. No left/right gutter is added here — adding one would
+	// consume a column of content width forever.
 	return &chatView{
 		buf:       vp,
 		follow:    true,
 		height:    height,
+		maxLines:  chatMaxLinesDefault,
+		dragRow:   -1,
 		sizeDirty: true, // first render must flush the live tail into the viewport
 	}
 }
@@ -104,15 +152,30 @@ func (c *chatView) syncSizeIfNeeded(width, height int) {
 	c.sizeDirty = true
 }
 
-// view returns the current viewport slice (how many rows of chat are visible
-// this frame) and keeps the viewport render-fresh for the live tail. It is
-// the Render path used by renderNormalView.
+// view returns the current viewport slice plus a right scrollbar column (one
+// row per visible line), so the caller's chat pane owns the full terminal width
+// — content fills chatBodyWidth and the bar sits in the reserved last column.
 func (c *chatView) view(live string) string {
 	if c == nil {
 		return live
 	}
 	c.ensureSynced(live)
-	return c.buf.View()
+	body := c.buf.View()
+	if _, needed := c.scrollThumbPosition(); !needed {
+		return body
+	}
+	thumb, _ := c.scrollThumbPosition()
+	viewLines := strings.Split(body, "\n")
+	barLines := strings.Split(scrollbarColumn(c.buf.Height(), thumb), "\n")
+	// Pad the bar to the viewport row count if the terminal trims trailing rows.
+	for len(barLines) < len(viewLines) {
+		barLines = append(barLines, lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted).Render("│"))
+	}
+	out := make([]string, len(viewLines))
+	for i := range viewLines {
+		out[i] = viewLines[i] + barLines[i]
+	}
+	return strings.Join(out, "\n")
 }
 
 // scrolledUp reports whether the chat is currently scrolled back from the
@@ -166,7 +229,7 @@ func (c *chatView) ensureSynced(live string) {
 		// anchors to the real content height, not a stale yOffset.
 		if live != c.lastLive {
 			c.lastLive = live
-			c.buf.SetContent(c.fullContent(live))
+			c.buf.SetContent(c.truncate(c.fullContent(live)))
 			c.buf.GotoBottom()
 		}
 		return
@@ -177,13 +240,50 @@ func (c *chatView) ensureSynced(live string) {
 	c.dirty = false
 	c.sizeDirty = false
 	c.lastLive = live
-	c.buf.SetContent(c.fullContent(live))
+	c.buf.SetContent(c.truncate(c.fullContent(live)))
 	if c.follow {
 		c.buf.GotoBottom()
 	} else {
 		c.buf.SetYOffset(c.scrollY)
 		c.scrollY = c.buf.YOffset() // read back the clamp
+		// Guard: the truncation may have swept the user's scroll position away.
+		// Clamp back into range so the next wheel notch doesn't jump.
+		if c.scrollY > c.buf.TotalLineCount()-c.buf.Height() {
+			c.scrollY = c.buf.TotalLineCount() - c.buf.Height()
+			c.buf.SetYOffset(c.scrollY)
+		}
 	}
+}
+
+// truncate drops the oldest lines of s so it stays within the maxLines budget
+// (committed blocks plus the live tail), preserving the newest content. A no-
+// op at the heightless cache size.
+func (c *chatView) truncate(s string) string {
+	if c == nil || c.maxLines <= 0 {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) <= c.maxLines {
+		return s
+	}
+	// Cut at a block boundary — don't slice a message mid-line.
+	// Blocks end with "\n\n"; dropping oldest full blocks is safest.
+	// Find the first good cut: skip past the excess lines plus any line that
+	// continues a block (heuristic: cut only at a line that starts a new
+	// block, i.e. following an empty line). If no clean boundary, cut raw.
+	excess := len(lines) - c.maxLines
+	cut := excess
+	for i := excess; i < len(lines); i++ {
+		if lines[i] == "" {
+			// Prefer cutting right after a blank line boundary.
+			cut = i + 1
+			break
+		}
+	}
+	if cut <= 0 || cut >= len(lines) {
+		cut = excess
+	}
+	return strings.Join(lines[cut:], "\n")
 }
 
 // rebuildCache replaces the committed-block cache wholesale (used by the
@@ -243,4 +343,151 @@ func (c *chatView) onScroll(delta int) bool {
 	}
 	c.scrollY = ny
 	return true
+}
+
+// OnScrollbar handles a press/drag/release event on the right scrollbar
+// gutter, packaging logical actions into a scrollY jump. Called from Update
+// so the viewport math stays off the event loop; c may be nil (no chat yet).
+// Returns true when the view moved (frame stale, repaint needed).
+func (c *chatView) onScrollbar(msg scrollbarJumpMsg) bool {
+	if c == nil {
+		return false
+	}
+	// Clamp the pointer row into the viewport so a release beyond the chat
+	// region (drag escaping the bar) maps to a sensible scroll target.
+	row := msg.row
+	if h := c.buf.Height(); h > 1 {
+		if row < 0 {
+			row = 0
+		} else if row >= h {
+			row = h - 1
+		}
+	}
+	switch msg.action {
+	case scrollbarTop, scrollbarBottom:
+		c.setJump(msg.action == scrollbarTop, c.buf.Height())
+		return true
+	case scrollbarThumbStart:
+		thumb, _ := c.scrollThumbPosition()
+		// Press on the thumb begins a drag; press elsewhere on the track pages
+		// one viewport in that direction.
+		if row == thumb {
+			c.dragRow = msg.row
+			return false
+		}
+		if row < thumb {
+			c.setJump(true, c.buf.Height())
+		} else {
+			c.setJump(false, c.buf.Height())
+		}
+		return true
+	case scrollbarThumbDrag:
+		// Release: jump to the release row — its fraction of the track maps to
+		// a fraction of the scrollable content. Only completes if a drag began.
+		if c.dragRow < 0 {
+			return false
+		}
+		if c.buf.TotalLineCount() <= c.buf.Height() {
+			c.dragRow = -1
+			return false
+		}
+		maxY := c.buf.TotalLineCount() - c.buf.Height()
+		target := int(float64(row) / float64(max(1, c.buf.Height()-1)) * float64(maxY))
+		c.setScrollY(target)
+		c.dragRow = -1
+		return true
+	case scrollbarThumbEnd:
+		c.dragRow = -1
+		return false
+	}
+	return false
+}
+
+// jumpTo moves the scroll to the specified absolute position, or to the top /
+// bottom, engaging / disengaging follow mode accordingly. It mirrors the
+// existing wheel / key handling (which uses setScrollY). This is the one place
+// that resets both follow and scrollY, so the scrollbar and wheel/keyboard stay
+// consistent.
+func (c *chatView) setScrollY(ny int) {
+	if c == nil {
+		return
+	}
+	c.buf.SetYOffset(ny)
+	ny = c.buf.YOffset()
+	c.scrollY = ny
+	if c.scrollY >= c.buf.TotalLineCount()-c.buf.Height() {
+		c.follow = true
+		c.buf.GotoBottom()
+	} else {
+		c.follow = false
+	}
+}
+
+// setJump adjusts the current scroll position by delta rows (signed), exiting
+// follow mode when scrolling up/back and snapping back to the bottom at the end.
+// used by track clicks above/below the thumb.
+func (c *chatView) setJump(up bool, delta int) {
+	if up {
+		if c.follow {
+			c.follow = false
+			c.scrollY = c.buf.YOffset()
+		}
+		c.buf.SetYOffset(c.scrollY - delta)
+		c.scrollY = c.buf.YOffset()
+		if c.scrollY <= 0 {
+			c.follow = true
+		}
+	} else {
+		c.buf.SetYOffset(c.scrollY + delta)
+		c.scrollY = c.buf.YOffset()
+		if c.scrollY >= c.buf.TotalLineCount()-c.buf.Height() {
+			c.follow = true
+			c.buf.GotoBottom()
+		}
+	}
+	if c.scrollY > c.buf.TotalLineCount()-c.buf.Height() {
+		c.scrollY = c.buf.TotalLineCount() - c.buf.Height()
+		c.buf.SetYOffset(c.scrollY)
+	}
+}
+
+// scrollbarColumn renders one width-1 column of the right scrollbar overlay for
+// the visible slice of the viewport: a thick "▊" thumb over a thin "│" track.
+// Returns "" when there is no content to scroll or the area is full-width.
+func scrollbarColumn(totalHeight, thumbRow int) string {
+	if totalHeight <= 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for row := 0; row < totalHeight; row++ {
+		if row == thumbRow {
+			sb.WriteString(lipgloss.NewStyle().Foreground(kit.CurrentTheme.Focus).Render("▊"))
+		} else {
+			sb.WriteString(lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted).Render("│"))
+		}
+	}
+	return sb.String()
+}
+
+// scrollThumbPosition returns the viewport-relative row where the scrollbar
+// thumb should sit, and whether a thumb is needed (content taller than the
+// viewport). Returns -1,false when nothing is scrollable.
+func (c *chatView) scrollThumbPosition() (row int, needed bool) {
+	if c == nil || c.buf.Height() <= 0 {
+		return -1, false
+	}
+	total := c.buf.TotalLineCount()
+	height := c.buf.Height()
+	if total <= height {
+		return -1, false
+	}
+	fraction := float64(c.buf.YOffset()) / float64(total-height)
+	row = int(fraction * float64(height-1))
+	if row < 0 {
+		row = 0
+	}
+	if row > height-1 {
+		row = height - 1
+	}
+	return row, true
 }
