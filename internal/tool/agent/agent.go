@@ -70,6 +70,9 @@ func (t *AgentTool) PreparePermission(ctx context.Context, params map[string]any
 	if !ok {
 		return nil, fmt.Errorf("unknown or disabled agent: %s", agentName)
 	}
+	if params == nil {
+		params = make(map[string]any)
+	}
 	params["_resolvedAgentConfig"] = resolvedConfig
 
 	// Determine effective model for permission display.

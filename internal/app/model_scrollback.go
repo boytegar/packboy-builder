@@ -121,8 +121,8 @@ func (m *model) FlushStreamingBlocks() []tea.Cmd {
 		contentEnd:       contentEnd,
 		showThinkingIcon: !msg.ThinkingEmitted,
 		showBullet:       !msg.BulletEmitted,
-		width:            m.env.Width,
-		md:               m.flush.mdRenderer(m.env.Width),
+		width:            m.chatBodyWidth(),
+		md:               m.flush.mdRenderer(m.chatBodyWidth()),
 	})}
 }
 

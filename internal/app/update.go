@@ -344,6 +344,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.chat.buf.GotoBottom()
 		}
 		return m, nil
+	case scrollbarJumpMsg:
+		if m.chat != nil {
+			m.chat.onScrollbar(msg)
+		}
+		return m, nil
 	case conv.QuestionResponseMsg:
 		return m, m.handleQuestionResponse(msg)
 	case input.SecretPromptResponseMsg:

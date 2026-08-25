@@ -18,6 +18,13 @@ import (
 
 var ghostTextStyle = lipgloss.NewStyle().Foreground(kit.CurrentTheme.TextDim)
 
+// chatBodyWidth is the chat-content width: the full window minus the one column
+// reserved for the right scrollbar. Chat rendering happens at this width so the
+// bar overlays cleanly without pushing wrapped lines off-screen.
+func (m *model) chatBodyWidth() int {
+	return max(1, m.env.Width-1)
+}
+
 // View dispatches to one of four layouts, top-down:
 //
 //  1. Loading splash (env not ready yet)
@@ -35,14 +42,28 @@ func (m *model) View() tea.View {
 	v.AltScreen = true                    // full-window chat: the viewport owns the screen
 	v.MouseMode = tea.MouseModeCellMotion // wheel + click reports route to the model
 	v.OnMouse = func(msg tea.MouseMsg) tea.Cmd {
-		// Wheel events never touch model state here — they package the delta
-		// and hand it to the Update loop (scrollMsg), which owns all scroll
-		// state.
-		switch msg.Mouse().Button {
+		mouse := msg.Mouse()
+		// The scrollbar occupies the reserved right column (env.Width-1).
+		barCol := m.env.Width - 1
+		switch mouse.Button {
 		case tea.MouseWheelUp:
 			return func() tea.Msg { return scrollMsg{delta: scrollStep} }
 		case tea.MouseWheelDown:
 			return func() tea.Msg { return scrollMsg{delta: -scrollStep} }
+		case tea.MouseLeft:
+			// Press on the bar column: begin a thumb interaction. The row
+			// decides track page vs thumb grab; onScrollbar resolves it.
+			if mouse.X == barCol {
+				return func() tea.Msg {
+					return scrollbarJumpMsg{action: scrollbarThumbStart, row: mouse.Y}
+				}
+			}
+		case tea.MouseNone:
+			// Release: complete a drag started on the bar, jumping to the
+			// release row. Only meaningful if a drag is in progress.
+			return func() tea.Msg {
+				return scrollbarJumpMsg{action: scrollbarThumbDrag, row: mouse.Y}
+			}
 		}
 		return nil
 	}
@@ -94,10 +115,11 @@ func (m *model) renderDockedModalView(separator, trackerView string, ov overlayP
 		chatHeight = 0
 	}
 
+	bodyWidth := m.chatBodyWidth()
 	if m.chat == nil {
-		m.chat = chatViewer(m.env.Width, chatHeight)
+		m.chat = chatViewer(bodyWidth, chatHeight)
 	} else {
-		m.chat.syncSizeIfNeeded(m.env.Width, chatHeight)
+		m.chat.syncSizeIfNeeded(bodyWidth, chatHeight)
 	}
 
 	activeContent := conv.RenderActiveContent(m.messageRenderParams())
@@ -154,10 +176,11 @@ func (m *model) renderNormalView(separator, trackerView string) (string, *tea.Cu
 	// Assemble the live tail (renderChatSection) and the chat viewport.
 	// The viewport slices the cached committed blocks + this live tail, so
 	// this join is the only full-content pass per frame.
+	bodyWidth := m.chatBodyWidth()
 	if m.chat == nil {
-		m.chat = chatViewer(m.env.Width, chatHeight) // first render
+		m.chat = chatViewer(bodyWidth, chatHeight) // first render
 	} else {
-		m.chat.syncSizeIfNeeded(m.env.Width, chatHeight)
+		m.chat.syncSizeIfNeeded(bodyWidth, chatHeight)
 	}
 
 	activeContent := conv.RenderActiveContent(m.messageRenderParams())
@@ -474,7 +497,7 @@ func (m model) messageRenderParams() conv.RenderContext {
 		ToolProgress:  m.conv.Tool.Progress,
 
 		// Renderer env
-		Width:      m.env.Width,
+		Width:      m.chatBodyWidth(),
 		MDRenderer: m.conv.MDRenderer,
 
 		// Per-tick UI state
