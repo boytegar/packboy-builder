@@ -623,3 +623,139 @@ func TestSkillsSectionIsEscapedCatalog(t *testing.T) {
 		t.Fatalf("enable-only skill leaked into catalog: %s", section)
 	}
 }
+
+func TestProjectSkillDirsDiscovered(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// .agents/skills/agents-skill
+	agentsSkillDir := filepath.Join(tmpDir, ".agents", "skills", "agents-skill")
+	writeSkillHelper(t, agentsSkillDir, "agents-skill")
+
+	// docs/skills/docs-skill
+	docsSkillDir := filepath.Join(tmpDir, "docs", "skills", "docs-skill")
+	writeSkillHelper(t, docsSkillDir, "docs-skill")
+
+	// skills/root-skill
+	rootSkillDir := filepath.Join(tmpDir, "skills", "root-skill")
+	writeSkillHelper(t, rootSkillDir, "root-skill")
+
+	got := projectSkillDirs(tmpDir)
+	want := []string{
+		filepath.Join(tmpDir, ".agents", "skills"),
+		filepath.Join(tmpDir, "docs", "skills"),
+		filepath.Join(tmpDir, "skills"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("projectSkillDirs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestProjectSkillDirsMissingSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Only create .agents/skills; docs/skills and skills/ are absent
+	agentsSkillDir := filepath.Join(tmpDir, ".agents", "skills", "only-skill")
+	writeSkillHelper(t, agentsSkillDir, "only-skill")
+
+	got := projectSkillDirs(tmpDir)
+	if len(got) != 1 {
+		t.Fatalf("projectSkillDirs = %v, want 1 entry", got)
+	}
+	want := filepath.Join(tmpDir, ".agents", "skills")
+	if got[0] != want {
+		t.Errorf("projectSkillDirs[0] = %q, want %q", got[0], want)
+	}
+}
+
+func TestLoadAllFromAgentsSkills(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Place a skill under .agents/skills (the path AGENTS.md points agents at).
+	skillDir := filepath.Join(tmpDir, ".agents", "skills", "agents-loaded")
+	writeSkillHelper(t, skillDir, "agents-loaded")
+
+	loader := &loader{cwd: tmpDir}
+	skills, err := loader.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll failed: %v", err)
+	}
+	sk, ok := skills["agents-loaded"]
+	if !ok {
+		t.Fatal("skill in .agents/skills not loaded - projectSkillDirs search path missing")
+	}
+	if sk.Scope != ScopeProject {
+		t.Errorf("Scope = %s, want ScopeProject", sk.Scope.String())
+	}
+}
+
+func TestLoadAllFromDocsSkills(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	skillDir := filepath.Join(tmpDir, "docs", "skills", "docs-loaded")
+	writeSkillHelper(t, skillDir, "docs-loaded")
+
+	loader := &loader{cwd: tmpDir}
+	skills, err := loader.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll failed: %v", err)
+	}
+	if _, ok := skills["docs-loaded"]; !ok {
+		t.Fatal("skill in docs/skills not loaded - projectSkillDirs search path missing")
+	}
+}
+
+func TestLoadAllFromRootSkills(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	skillDir := filepath.Join(tmpDir, "skills", "root-loaded")
+	writeSkillHelper(t, skillDir, "root-loaded")
+
+	loader := &loader{cwd: tmpDir}
+	skills, err := loader.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll failed: %v", err)
+	}
+	if _, ok := skills["root-loaded"]; !ok {
+		t.Fatal("skill in root skills/ not loaded - projectSkillDirs search path missing")
+	}
+}
+
+func TestSkipDirEntriesPrunesVendoredSkills(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// A real skill under .agents/skills that should be loaded.
+	writeSkillHelper(t, filepath.Join(tmpDir, ".agents", "skills", "real"), "real")
+
+	// A stray SKILL.md inside node_modules that must NOT be loaded.
+	writeSkillHelper(t, filepath.Join(tmpDir, "node_modules", "some-pkg", "skills", "stray"), "stray")
+
+	// A stray SKILL.md inside vendor that must NOT be loaded.
+	writeSkillHelper(t, filepath.Join(tmpDir, "vendor", "lib", "skills", "vendored"), "vendored")
+
+	// A stray SKILL.md inside .git that must NOT be loaded.
+	writeSkillHelper(t, filepath.Join(tmpDir, ".git", "hooks", "skills", "git-stray"), "git-stray")
+
+	loader := &loader{cwd: tmpDir}
+	skills, err := loader.loadAll()
+	if err != nil {
+		t.Fatalf("loadAll failed: %v", err)
+	}
+
+	if _, ok := skills["real"]; !ok {
+		t.Error("real skill under .agents/skills was not loaded")
+	}
+	if _, ok := skills["stray"]; ok {
+		t.Error("stray skill inside node_modules was loaded - skipDirEntries prune failed")
+	}
+	if _, ok := skills["vendored"]; ok {
+		t.Error("stray skill inside vendor was loaded - skipDirEntries prune failed")
+	}
+	if _, ok := skills["git-stray"]; ok {
+		t.Error("stray skill inside .git was loaded - skipDirEntries prune failed")
+	}
+}

@@ -25,6 +25,21 @@ func (m *model) chatBodyWidth() int {
 	return max(1, m.env.Width-1)
 }
 
+// attachScrollbar renders the chat body next to a standalone scrollbar column
+// on the right. The scrollbar is a sibling widget (not appended to chat text),
+// so selecting/copying conversation content never grabs scrollbar glyphs. When
+// there is nothing to scroll, no bar is attached and the body is returned as-is.
+func (m *model) attachScrollbar(chatSection string) string {
+	if m.chat == nil {
+		return chatSection
+	}
+	bar := m.chat.scrollbarWidget()
+	if bar == "" {
+		return chatSection
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, chatSection, bar)
+}
+
 // View dispatches to one of four layouts, top-down:
 //
 //  1. Loading splash (env not ready yet)
@@ -39,30 +54,45 @@ func (m *model) View() tea.View {
 	content, cursor := m.viewString()
 	v := tea.NewView(content)
 	v.Cursor = cursor
-	v.AltScreen = true                    // full-window chat: the viewport owns the screen
-	v.MouseMode = tea.MouseModeCellMotion // wheel + click reports route to the model
+	v.AltScreen = true // full-window chat: the viewport owns the screen
+	// CellMotion (DEC 1002) reports click, release, wheel, AND drag (motion
+	// while a button is held) — exactly what the scrollbar thumb drag needs.
+	// AllMotion (1003) would also capture button-less motion and tends to
+	// break native text selection/copy, which defeats the scrollbar fix.
+	v.MouseMode = tea.MouseModeCellMotion
 	v.OnMouse = func(msg tea.MouseMsg) tea.Cmd {
 		mouse := msg.Mouse()
 		// The scrollbar occupies the reserved right column (env.Width-1).
 		barCol := m.env.Width - 1
-		switch mouse.Button {
-		case tea.MouseWheelUp:
-			return func() tea.Msg { return scrollMsg{delta: scrollStep} }
-		case tea.MouseWheelDown:
-			return func() tea.Msg { return scrollMsg{delta: -scrollStep} }
-		case tea.MouseLeft:
+		switch msg.(type) {
+		case tea.MouseWheelMsg:
+			switch mouse.Button {
+			case tea.MouseWheelUp:
+				return func() tea.Msg { return scrollMsg{delta: scrollStep} }
+			case tea.MouseWheelDown:
+				return func() tea.Msg { return scrollMsg{delta: -scrollStep} }
+			}
+		case tea.MouseClickMsg:
 			// Press on the bar column: begin a thumb interaction. The row
 			// decides track page vs thumb grab; onScrollbar resolves it.
-			if mouse.X == barCol {
+			if mouse.Button == tea.MouseLeft && mouse.X == barCol {
 				return func() tea.Msg {
 					return scrollbarJumpMsg{action: scrollbarThumbStart, row: mouse.Y}
 				}
 			}
-		case tea.MouseNone:
-			// Release: complete a drag started on the bar, jumping to the
-			// release row. Only meaningful if a drag is in progress.
+		case tea.MouseMotionMsg:
+			// Fires while the left button is held (AllMotion). Drive the drag;
+			// chatView.onScrollbar ignores it unless a drag is in progress.
+			if mouse.Button == tea.MouseLeft || mouse.Button == tea.MouseNone {
+				return func() tea.Msg {
+					return scrollbarJumpMsg{action: scrollbarThumbDrag, row: mouse.Y}
+				}
+			}
+		case tea.MouseReleaseMsg:
+			// Release: end the drag. Only meaningful if a drag is in progress;
+			// onScrollbar clears dragRow regardless.
 			return func() tea.Msg {
-				return scrollbarJumpMsg{action: scrollbarThumbDrag, row: mouse.Y}
+				return scrollbarJumpMsg{action: scrollbarThumbEnd, row: mouse.Y}
 			}
 		}
 		return nil
@@ -125,6 +155,7 @@ func (m *model) renderDockedModalView(separator, trackerView string, ov overlayP
 	activeContent := conv.RenderActiveContent(m.messageRenderParams())
 	live := m.renderChatSection(activeContent, trackerView)
 	chatSection := m.chat.view(live)
+	chatSection = m.attachScrollbar(chatSection)
 	// Strip trailing newline so the top separator doesn't leave an extra blank.
 	chatSection = strings.TrimRight(chatSection, "\n")
 
@@ -186,6 +217,7 @@ func (m *model) renderNormalView(separator, trackerView string) (string, *tea.Cu
 	activeContent := conv.RenderActiveContent(m.messageRenderParams())
 	live := m.renderChatSection(activeContent, trackerView)
 	chatSection := m.chat.view(live)
+	chatSection = m.attachScrollbar(chatSection)
 
 	return chatSection + footer, m.inputCursor(strings.Count(chatSection, "\n") + inputRow)
 }
