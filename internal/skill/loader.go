@@ -93,13 +93,56 @@ func (l *loader) getSearchPaths() []searchPath {
 	// 5. Project-scope plugin skills
 	paths = append(paths, projectPlugins...)
 
-	// 6. .pcb/skills/ (Project level - highest priority)
+	// 6. Well-known project skill directories (.agents/skills, docs/skills,
+	// skills/). These share ScopeProject with .pcb/skills so that a user can
+	// drop a SKILL.md next to their docs/agents without registering a custom
+	// path. Skips node_modules/vendor/.git/etc. via skipDirEntries.
+	for _, dir := range projectSkillDirs(l.cwd) {
+		paths = append(paths, searchPath{
+			path:  dir,
+			scope: ScopeProject,
+		})
+	}
+
+	// 7. .pcb/skills/ (Project level - highest priority)
 	paths = append(paths, searchPath{
 		path:  filepath.Join(confdir.Dir(l.cwd), "skills"),
 		scope: ScopeProject,
 	})
 
 	return paths
+}
+
+// skipDirEntries are directory basenames that must never be walked when
+// scanning for project-level skills. They contain vendored/generated code or
+// caches where an incidental SKILL.md would be misleading.
+var skipDirEntries = map[string]bool{
+	"node_modules": true,
+	"vendor":       true,
+	".git":         true,
+	"bin":          true,
+	"dist":         true,
+	"build":        true,
+	"target":       true,
+	".cache":       true,
+}
+
+// projectSkillDirs returns well-known project-level skill directories relative
+// to the current working directory. Only directories that exist on disk are
+// returned, so missing directories add no overhead.
+func projectSkillDirs(cwd string) []string {
+	candidates := []string{
+		filepath.Join(cwd, ".agents", "skills"),
+		filepath.Join(cwd, "docs", "skills"),
+		filepath.Join(cwd, "skills"),
+	}
+	var out []string
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // pluginPaths splits the injected plugin skill directories into user- and
@@ -137,6 +180,12 @@ func (l *loader) loadAll() (map[string]*Skill, error) {
 
 			// Look for SKILL.md files (case-insensitive)
 			if info.IsDir() {
+				// Prune dependency/cache directories (node_modules, vendor,
+				// .git, etc.) so an incidental SKILL.md in vendored code is
+				// never picked up and walks stay fast for broad project dirs.
+				if path != sp.path && skipDirEntries[info.Name()] {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			baseName := strings.ToLower(info.Name())

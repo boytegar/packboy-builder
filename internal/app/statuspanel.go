@@ -103,7 +103,7 @@ func (m model) skillStatusColumn(maxWidth int) string {
 	if m.services.Skill == nil {
 		return ""
 	}
-	skills := m.services.Skill.GetActive()
+	skills := m.services.Skill.GetEnabled()
 	if len(skills) == 0 {
 		return ""
 	}
@@ -117,7 +117,14 @@ func (m model) skillStatusColumn(maxWidth int) string {
 		// Strip newlines and truncate to fit column width
 		name := strings.ReplaceAll(s.FullName(), "\n", " ")
 		name = strings.Join(strings.Fields(name), " ")
-		line := "● " + name
+		// Active skills are fully loaded; enabled skills are available but
+		// not yet activated. Differentiate the glyph so the status panel
+		// reflects both states instead of hiding enabled-only skills.
+		dot := "◐"
+		if s.IsActive() {
+			dot = "●"
+		}
+		line := dot + " " + name
 		if ansi.StringWidth(line) > maxWidth {
 			line = ansi.Truncate(line, maxWidth, "…")
 		}

@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
-	"charm.land/lipgloss/v2"
 
 	"github.com/boytegar/packboy-builder/internal/app/kit"
 )
@@ -155,27 +154,59 @@ func (c *chatView) syncSizeIfNeeded(width, height int) {
 // view returns the current viewport slice plus a right scrollbar column (one
 // row per visible line), so the caller's chat pane owns the full terminal width
 // — content fills chatBodyWidth and the bar sits in the reserved last column.
+// view returns the conversation body only — the scrollbar is rendered as a
+// separate sibling column by the view layer (see scrollbarWidget), so it is
+// never part of the copyable chat text.
 func (c *chatView) view(live string) string {
 	if c == nil {
 		return live
 	}
 	c.ensureSynced(live)
-	body := c.buf.View()
-	if _, needed := c.scrollThumbPosition(); !needed {
-		return body
+	return c.buf.View()
+}
+
+// scrollbarGeometry reports the thumb row, the track height, and whether a
+// scrollbar is needed at all (content taller than the viewport).
+func (c *chatView) scrollbarGeometry() (thumbRow, trackHeight int, needed bool) {
+	if c == nil || c.buf.Height() <= 0 {
+		return -1, 0, false
 	}
-	thumb, _ := c.scrollThumbPosition()
-	viewLines := strings.Split(body, "\n")
-	barLines := strings.Split(scrollbarColumn(c.buf.Height(), thumb), "\n")
-	// Pad the bar to the viewport row count if the terminal trims trailing rows.
-	for len(barLines) < len(viewLines) {
-		barLines = append(barLines, lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted).Render("│"))
+	trackHeight = c.buf.Height()
+	thumbRow, needed = c.scrollThumbPosition()
+	return thumbRow, trackHeight, needed
+}
+
+// scrollbarWidget renders a 1-column scrollbar with a draggable thumb.
+// It is a standalone widget (not appended to chat text) so selecting chat
+// content never copies scrollbar glyphs.
+//
+// Only the thumb is drawn (the track is left blank) so that shift-click
+// full-width selection copies trailing spaces instead of a `│` glyph on every
+// line — the only character that can still ride along is the single thumb row.
+//
+// The thumb uses kit.FocusBar (the brand accent, "▎") to mark "you are here",
+// consistent with the TUI selection affordance per the design guide.
+func (c *chatView) scrollbarWidget() string {
+	if c == nil {
+		return ""
 	}
-	out := make([]string, len(viewLines))
-	for i := range viewLines {
-		out[i] = viewLines[i] + barLines[i]
+	thumbRow, trackHeight, needed := c.scrollbarGeometry()
+	if !needed || trackHeight <= 0 {
+		return ""
 	}
-	return strings.Join(out, "\n")
+	// Build the widget with the same height as the chat viewport so it stays
+	// vertically aligned row-for-row. Non-thumb rows are spaces (copy-clean),
+	// the thumb row is the focus glyph.
+	focus := kit.FocusBarStyle()
+	rows := make([]string, trackHeight)
+	for row := 0; row < trackHeight; row++ {
+		if row == thumbRow {
+			rows[row] = focus.Render(kit.FocusBar)
+		} else {
+			rows[row] = " "
+		}
+	}
+	return strings.Join(rows, "\n")
 }
 
 // scrolledUp reports whether the chat is currently scrolled back from the
@@ -231,6 +262,7 @@ func (c *chatView) ensureSynced(live string) {
 			c.lastLive = live
 			c.buf.SetContent(c.truncate(c.fullContent(live)))
 			c.buf.GotoBottom()
+			c.scrollY = c.buf.YOffset()
 		}
 		return
 	}
@@ -243,6 +275,7 @@ func (c *chatView) ensureSynced(live string) {
 	c.buf.SetContent(c.truncate(c.fullContent(live)))
 	if c.follow {
 		c.buf.GotoBottom()
+		c.scrollY = c.buf.YOffset()
 	} else {
 		c.buf.SetYOffset(c.scrollY)
 		c.scrollY = c.buf.YOffset() // read back the clamp
@@ -318,23 +351,21 @@ func (c *chatView) onScroll(delta int) bool {
 	if c == nil {
 		return false
 	}
+	// First wheel-up while following: capture the true bottom as scrollY and
+	// exit follow mode WITHOUT scrolling. This anchors the unfollow offset to
+	// the real content bottom so a subsequent wheel-up starts from the actual
+	// last line instead of a stale yOffset (fixes "at bottom yet scroll starts
+	// mid-screen"). Only a second wheel-up actually moves the view.
 	if delta > 0 && c.follow {
-		// First upward scroll: exit follow mode, remembering where the bottom
-		// was so the next wheel notch scrolls back from here.
 		c.follow = false
 		c.scrollY = c.buf.YOffset()
 		return true
 	}
-	// Clamp to the viewport's own bounds by letting SetYOffset do the math,
-	// then read the actual offset back so scrollY agrees with the viewport.
-	// delta is signed toward older content (wheel-up/pgup > 0), but a higher
-	// YOffset reveals newer content, so a scroll-back must decrement the
-	// offset — hence the negation.
+	// Apply delta and clamp.
 	c.buf.SetYOffset(c.scrollY - delta)
 	ny := c.buf.YOffset()
 	if ny == c.scrollY {
-		// No movement — already at a bound. If the user wheeled down to the
-		// very bottom, snap back into follow mode so new content scrolls in.
+		// No movement. If wheeled down to true bottom, re-enable follow.
 		if delta < 0 && c.buf.AtBottom() {
 			c.follow = true
 			return true
@@ -382,19 +413,18 @@ func (c *chatView) onScrollbar(msg scrollbarJumpMsg) bool {
 		}
 		return true
 	case scrollbarThumbDrag:
-		// Release: jump to the release row — its fraction of the track maps to
-		// a fraction of the scrollable content. Only completes if a drag began.
+		// Motion while the button is held: map the row's fraction of the track
+		// to a fraction of the scrollable content. Keep dragRow armed so the
+		// next motion event continues the drag; scrollbarThumbEnd clears it.
 		if c.dragRow < 0 {
 			return false
 		}
 		if c.buf.TotalLineCount() <= c.buf.Height() {
-			c.dragRow = -1
 			return false
 		}
 		maxY := c.buf.TotalLineCount() - c.buf.Height()
 		target := int(float64(row) / float64(max(1, c.buf.Height()-1)) * float64(maxY))
 		c.setScrollY(target)
-		c.dragRow = -1
 		return true
 	case scrollbarThumbEnd:
 		c.dragRow = -1
@@ -449,24 +479,6 @@ func (c *chatView) setJump(up bool, delta int) {
 		c.scrollY = c.buf.TotalLineCount() - c.buf.Height()
 		c.buf.SetYOffset(c.scrollY)
 	}
-}
-
-// scrollbarColumn renders one width-1 column of the right scrollbar overlay for
-// the visible slice of the viewport: a thick "▊" thumb over a thin "│" track.
-// Returns "" when there is no content to scroll or the area is full-width.
-func scrollbarColumn(totalHeight, thumbRow int) string {
-	if totalHeight <= 0 {
-		return ""
-	}
-	var sb strings.Builder
-	for row := 0; row < totalHeight; row++ {
-		if row == thumbRow {
-			sb.WriteString(lipgloss.NewStyle().Foreground(kit.CurrentTheme.Focus).Render("▊"))
-		} else {
-			sb.WriteString(lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted).Render("│"))
-		}
-	}
-	return sb.String()
 }
 
 // scrollThumbPosition returns the viewport-relative row where the scrollbar
