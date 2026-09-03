@@ -31,20 +31,6 @@ Allowed folders/files: [type exact folder or file scope here]
 ``` 
 If the scope field is filled by the user, treat it as a hard boundary; refuse edits outside it.
 
-## RTK
-RTK is detected at `/home/boytegar/.local/bin/rtk`; usability/capability version needs verification. Prefer RTK for token-efficient read/inspection where supported:
-```bash
-rtk ls .
-rtk read <file>
-rtk smart <file>
-rtk find "<glob>" .
-rtk grep "<pattern>" .
-rtk diff <left> <right>
-rtk err go build ./...
-rtk go test ./...
-```
-These reduce tree, file, grep, diff, build-error, and Go-test output. Structured/data-analysis RTK workflows: Needs verification. If RTK is unavailable/not applicable, use normal repository tools. Do not invent RTK write/edit capabilities; none are evidenced.
-
 ## Workflow
 Real commands/evidence:
 ```bash

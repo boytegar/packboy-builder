@@ -309,7 +309,12 @@ func (r *Registry) GetSkillsSection() string {
 	}
 	sb.WriteString("</available_skills>\n\n")
 	sb.WriteString("<skills_usage>\n")
-	sb.WriteString("When a request or subtask matches an available skill, invoke Skill with its exact name before other task tools. The catalog is metadata only: Skill loads the full instructions, scripts, and references after permission approval. Do not claim a skill is loaded until the Skill tool succeeds.\n")
+	sb.WriteString("MANDATORY SKILL PROTOCOL — follow before any task work:\n")
+	sb.WriteString("1. SCAN: Before writing code, running commands, or starting any task, scan the <available_skills> list above. This is non-negotiable — skills encode reusable instructions, scripts, and references that prevent redundant work and align with project conventions.\n")
+	sb.WriteString("2. MATCH: If ANY skill's name, namespace, or description relates to your task — even partially — you MUST invoke the Skill tool with that skill's exact <name> before calling other task tools. When multiple skills match, invoke the most specific one first. Partial keyword overlap is sufficient — do not wait for a perfect match.\n")
+	sb.WriteString("3. EXECUTE: The Skill tool loads the full instructions, scripts, and references into your context. Only after it succeeds are you permitted to proceed with the task using those instructions. Do not claim a skill is loaded until the Skill tool returns its content.\n")
+	sb.WriteString("4. SUBAGENT DELEGATION: When dispatching a subagent, check which skills are relevant to the delegation and include the skill names in the prompt so the subagent can invoke them. If a subagent has the Skill tool, it follows this same protocol.\n")
+	sb.WriteString("5. NO-BYPASS: Do not implement a task from scratch when a matching skill exists. Do not skip the scan step — 'I know how to do this' is not a valid reason to skip a skill. If no skill matches, proceed normally.\n")
 	sb.WriteString("</skills_usage>")
 	return sb.String()
 }
@@ -468,15 +473,12 @@ func tokenizePrompt(text string) map[string]bool {
 	return set
 }
 
-// skillMatchesText reports whether an active skill's name or description
-// keywords appear in the tokenized user text. The name and namespace are
-// checked as whole-word matches; the description contributes its longest
-// content words (>=4 chars) so a skill like "commit: create a git commit"
-// matches when the user says "commit" or "git".
-// skillMatchesText returns true only for high-confidence exact matches:
-// the prompt must contain the skill's name or namespace as a complete
-// token (case-insensitive). Description keyword matching is intentionally
-// excluded to avoid false-positive injections.
+// skillMatchesText reports whether an active skill's name, namespace, or
+// description keywords appear in the tokenized user text. The name and
+// namespace are checked as whole-word matches (>=3 chars). The description
+// contributes its content words (>=4 chars) so a skill like "golang-testing"
+// with description "Go testing patterns including table-driven tests..."
+// matches when the user says "tests" or "testing".
 func skillMatchesText(sk *Skill, tokens map[string]bool) bool {
 	for _, part := range strings.Fields(strings.ToLower(sk.Name)) {
 		if len(part) >= 3 && tokens[part] {
@@ -486,6 +488,14 @@ func skillMatchesText(sk *Skill, tokens map[string]bool) bool {
 	if sk.Namespace != "" {
 		for _, part := range strings.Fields(strings.ToLower(sk.Namespace)) {
 			if len(part) >= 3 && tokens[part] {
+				return true
+			}
+		}
+	}
+	// Also match against description keywords (>=4 chars to avoid stop words).
+	if sk.Description != "" {
+		for _, part := range strings.Fields(strings.ToLower(sk.Description)) {
+			if len(part) >= 4 && tokens[part] {
 				return true
 			}
 		}

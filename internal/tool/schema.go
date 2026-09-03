@@ -21,6 +21,7 @@ const (
 	ToolTaskUpdate      = "TaskUpdate"
 	ToolCron            = "Cron"
 	ToolAskUserQuestion = "AskUserQuestion"
+	ToolExitSpecMode    = "ExitSpecMode"
 
 	ToolEvolve = "Evolve"
 	ToolLSP    = "LSP"
@@ -61,6 +62,7 @@ type SchemaOptions struct {
 // the reverse: a registered tool must not be missing from this order.
 var builtinToolOrder = []string{
 	ToolRead, ToolWebFetch, ToolWebSearch, ToolEdit, ToolWrite, ToolBash, ToolAskUserQuestion,
+	ToolExitSpecMode,
 	ToolSkill,
 	ToolLSP,
 	ToolAgent, ToolAgentStop, ToolSendMessage,

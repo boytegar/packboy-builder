@@ -83,6 +83,7 @@ type runConfig struct {
 	displayName string
 	brief       system.SubagentBrief // identity/charter for this run; immutable
 	permMode    PermissionMode
+	complexity  string // light / medium / heavy; resolved from req → config → "medium"
 }
 
 // PermissionModeFromOperationMode preserves the parent session's effective
@@ -414,14 +415,18 @@ func (e *Executor) prepareRunConfig(ctx context.Context, req tool.AgentExecReque
 	if err != nil {
 		return nil, err
 	}
+
+	complexity := normalizeComplexity(req.Complexity, config.Complexity)
+
 	return &runConfig{
 		config:      config,
 		provider:    provider,
 		modelID:     modelID,
 		maxSteps:    maxSteps,
 		displayName: displayName,
-		brief:       e.buildBrief(config, permMode),
+		brief:       e.buildBriefWithComplexity(config, permMode, complexity),
 		permMode:    permMode,
+		complexity:  complexity,
 	}, nil
 }
 

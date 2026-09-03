@@ -32,6 +32,10 @@ func effectiveToolConstraints(config *AgentConfig, permMode PermissionMode) []st
 // land in the subagent's identity slot — there is no separate "assignment"
 // section anymore.
 func (e *Executor) buildBrief(config *AgentConfig, permMode PermissionMode) system.SubagentBrief {
+	return e.buildBriefWithComplexity(config, permMode, "")
+}
+
+func (e *Executor) buildBriefWithComplexity(config *AgentConfig, permMode PermissionMode, complexity string) system.SubagentBrief {
 	custom := strings.TrimSpace(config.GetSystemPrompt())
 
 	// Preloaded skills are static configuration on AgentConfig.Skills. We
@@ -59,6 +63,7 @@ func (e *Executor) buildBrief(config *AgentConfig, permMode PermissionMode) syst
 		Mode:            string(permMode),
 		ToolConstraints: effectiveToolConstraints(config, permMode),
 		CustomPrompt:    custom,
+		Complexity:      complexity,
 	}
 }
 
@@ -269,4 +274,16 @@ func displayPermissionMode(mode PermissionMode) string {
 	default:
 		return "Default"
 	}
+}
+
+// normalizeComplexity resolves the effective complexity level from the
+// request, then the agent config, then the default "medium".
+func normalizeComplexity(reqComplexity, configComplexity string) string {
+	if c := strings.ToLower(strings.TrimSpace(reqComplexity)); c == "light" || c == "medium" || c == "heavy" {
+		return c
+	}
+	if c := strings.ToLower(strings.TrimSpace(configComplexity)); c == "light" || c == "medium" || c == "heavy" {
+		return c
+	}
+	return "medium"
 }

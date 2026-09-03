@@ -35,6 +35,13 @@ type BashMetadata struct {
 	Description   string `json:"description,omitempty"`
 	RunBackground bool   `json:"runBackground,omitempty"`
 	LineCount     int    `json:"lineCount,omitempty"`
+
+	// RiskLevel and RiskReason are set by the risk classifier to help
+	// the agent and the permission system reason about the severity,
+	// scope, and reversibility of the command.
+	RiskLevel   string `json:"riskLevel,omitempty"`
+	RiskReason  string `json:"riskReason,omitempty"`
+	RiskSummary string `json:"riskSummary,omitempty"`
 }
 
 // SkillMetadata contains metadata for Skill permission requests.

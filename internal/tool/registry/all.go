@@ -10,6 +10,7 @@ import (
 	_ "github.com/boytegar/packboy-builder/internal/tool/lsp"
 	_ "github.com/boytegar/packboy-builder/internal/tool/mode"
 	_ "github.com/boytegar/packboy-builder/internal/tool/skill"
+	_ "github.com/boytegar/packboy-builder/internal/tool/specmode"
 	_ "github.com/boytegar/packboy-builder/internal/tool/tasktools"
 	_ "github.com/boytegar/packboy-builder/internal/tool/web"
 )

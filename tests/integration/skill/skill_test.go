@@ -125,7 +125,7 @@ func TestSkill_AvailablePrompt(t *testing.T) {
 	if strings.Contains(prompt, "review") {
 		t.Error("enabled (non-active) skill 'review' should not be in prompt")
 	}
-	if !strings.Contains(prompt, "Use the Skill tool to invoke") {
+	if !strings.Contains(prompt, "MANDATORY SKILL PROTOCOL") {
 		t.Error("expected skills directory header in body")
 	}
 }
@@ -315,7 +315,7 @@ func TestSkill_Active_AppearsInSystemPrompt(t *testing.T) {
 
 	// Body must include the directory header (XML wrapping is added by the
 	// system catalog, not the registry).
-	if !strings.Contains(prompt, "Use the Skill tool to invoke") {
+	if !strings.Contains(prompt, "MANDATORY SKILL PROTOCOL") {
 		t.Error("expected skills directory header in body")
 	}
 

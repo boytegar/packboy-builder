@@ -171,6 +171,7 @@ func (t *AgentTool) execute(ctx context.Context, params map[string]any, cwd stri
 	}
 
 	maxSteps := tool.GetInt(params, "max_steps", 0)
+	complexity := tool.GetString(params, "complexity")
 
 	// Check executor
 	if t.executor == nil {
@@ -189,6 +190,7 @@ func (t *AgentTool) execute(ctx context.Context, params map[string]any, cwd stri
 		Model:               model,
 		MaxSteps:            maxSteps,
 		Mode:                mode,
+		Complexity:          complexity,
 		OnActivity:          onActivity,
 		OnQuestion:          onQuestion,
 	}

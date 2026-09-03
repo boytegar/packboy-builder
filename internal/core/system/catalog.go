@@ -194,6 +194,7 @@ type SubagentBrief struct {
 	Mode            string   // "explore" / "default" / "acceptEdits" / "bypass"
 	ToolConstraints []string // e.g. "Bash limited to git diff*"
 	CustomPrompt    string   // AGENT.md body
+	Complexity      string   // light / medium / heavy; injected into the system prompt when non-empty
 }
 
 // WithSubagentIdentity replaces the default identity with a subagent charter.
@@ -242,6 +243,9 @@ func renderSubagentIdentity(b SubagentBrief) string {
 		sb.WriteString(body)
 		sb.WriteByte('\n')
 	}
+	if c := strings.TrimSpace(b.Complexity); c != "" {
+		fmt.Fprintf(&sb, "\nComplexity: %s. %s\n", c, complexityGuidance(c))
+	}
 	attrs := map[string]string{}
 	if b.Mode != "" {
 		attrs["mode"] = b.Mode
@@ -259,6 +263,17 @@ func modeDescription(mode string) string {
 		return "permission checks bypassed; act with care on destructive operations"
 	default:
 		return "read and analysis tools only; mutating tools are denied unless an allow rule covers them"
+	}
+}
+
+func complexityGuidance(level string) string {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "light":
+		return "Execute directly with minimal exploration. Do not over-reason — act on the most obvious path. Good for mechanical edits, format fixes, simple lookups."
+	case "heavy":
+		return "Reason deeply. Explore alternatives, consider edge cases, read related code broadly, write thorough tests. Good for architectural changes, security-sensitive code, or complex logic."
+	default:
+		return "Balanced investigation. Read enough to be accurate, implement cleanly, verify with a build. Good for most tasks."
 	}
 }
 

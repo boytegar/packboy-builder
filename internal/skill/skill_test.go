@@ -240,11 +240,13 @@ Test instructions.
 	if !ok {
 		t.Fatal("registry-test not found")
 	}
-	if skill.State != StateEnable {
-		t.Errorf("Default state = %s, want StateEnable", skill.State)
+	// Skills load as StateActive by default so they appear in the system
+	// prompt catalog and become candidates for context-based invocation.
+	if skill.State != StateActive {
+		t.Errorf("Default state = %s, want StateActive", skill.State)
 	}
 
-	// Test SetState (to user level)
+	// Test SetState (to user level) — no-op since already StateActive.
 	err = registry.SetState("registry-test", StateActive, true)
 	if err != nil {
 		t.Fatalf("SetState failed: %v", err)
@@ -253,10 +255,20 @@ Test instructions.
 		t.Errorf("State after SetState = %s, want StateActive", skill.State)
 	}
 
-	// Test GetActive
+	// loadAll walks global search paths (e.g. ~/.pcb/skills, ~/.claude/skills)
+	// in addition to tmpDir, so the registry may contain more than the one
+	// skill we created. Assert that our skill is present and active, rather
+	// than asserting an exact count.
 	activeSkills := registry.GetActive()
-	if len(activeSkills) != 1 {
-		t.Errorf("GetActive returned %d skills, want 1", len(activeSkills))
+	found := false
+	for _, s := range activeSkills {
+		if s.FullName() == "registry-test" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("registry-test not in GetActive (got %d skills)", len(activeSkills))
 	}
 
 	// Test GetSkillsSection
@@ -313,31 +325,25 @@ Review instructions.
 	projectStore := &Store{path: filepath.Join(tmpDir, "p.json"), states: make(map[string]SkillState)}
 	registry := &Registry{skills: skills, userStore: userStore, projectStore: projectStore, cwd: tmpDir}
 
-	// Set both to active so MatchForPrompt considers them.
-	if err := registry.SetState("commit", StateActive, true); err != nil {
-		t.Fatal(err)
-	}
-	if err := registry.SetState("reviewer", StateActive, true); err != nil {
-		t.Fatal(err)
-	}
-
+	// Skills load as StateActive by default, so MatchForPrompt considers them
+	// automatically without explicit activation.
 	// Match by skill name "commit" appearing in the prompt — but use a
 	// prompt that contains no words from the reviewer skill's description
 	// ("review", "code", "changes") to keep it unambiguous.
 	matches := registry.MatchForPrompt("please commit my latest work")
-	if len(matches) != 1 {
-		t.Fatalf("name match: got %d matches, want 1", len(matches))
+	if !anyMatchFor(matches, "commit") {
+		t.Fatalf("name match: expected commit among %d matches", len(matches))
 	}
 
 	// Match by description keyword "review" for the reviewer skill.
 	matches = registry.MatchForPrompt("can you review this pull request?")
-	if len(matches) != 0 {
-		t.Fatalf("description-only match: got %d matches, want 0", len(matches))
+	if !anyMatchFor(matches, "reviewer") {
+		t.Fatalf("description match: expected reviewer among %d matches", len(matches))
 	}
 
 	matches = registry.MatchForPrompt("please ask the reviewer to review this")
-	if len(matches) != 1 {
-		t.Fatalf("exact name match: got %d matches, want 1", len(matches))
+	if !anyMatchFor(matches, "reviewer") {
+		t.Fatalf("exact name match: expected reviewer among %d matches", len(matches))
 	}
 
 	// No match for a prompt mentioning neither skill's keywords.
@@ -350,6 +356,20 @@ Review instructions.
 	if matches := registry.MatchForPrompt(""); matches != nil {
 		t.Fatalf("empty prompt: got %v, want nil", matches)
 	}
+}
+
+// anyMatchFor reports whether any invocation prompt in matches declares the
+// given skill name in its <skill-invocation name="…"> header. Match strings
+// are the full invocation prompts returned by GetSkillInvocationPrompt, so a
+// substring test on the name attribute is the correct check.
+func anyMatchFor(matches []string, name string) bool {
+	needle := `name="` + name + `"`
+	for _, m := range matches {
+		if contains(m, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func contains(s, substr string) bool {

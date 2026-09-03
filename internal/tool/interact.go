@@ -14,6 +14,7 @@ type QuestionOption struct {
 type Question struct {
 	Question    string           `json:"question"`
 	Header      string           `json:"header"`
+	Topic       string           `json:"topic,omitempty"`
 	Options     []QuestionOption `json:"options"`
 	MultiSelect bool             `json:"multiSelect"`
 }
