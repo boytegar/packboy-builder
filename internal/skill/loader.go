@@ -234,7 +234,7 @@ func (l *loader) loadSkillFile(path string, scope SkillScope, defaultNamespace s
 		FilePath: path,
 		SkillDir: skillDir,
 		Scope:    scope,
-		State:    StateEnable,
+		State:    StateActive,
 	}
 
 	if fm != "" {

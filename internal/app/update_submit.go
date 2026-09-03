@@ -212,6 +212,7 @@ func (m *model) visionPrePassCmd(images []core.Image) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), visionPrePassTimeout)
 		defer cancel()
 		analysis, err := llm.AnalyzeImages(ctx, store, ref, imagesCopy)
+		log.QueueLog("visionPrePassCmd: AnalyzeImages done analysis_len=%d err=%v", len(analysis), err)
 		return visionAnalysisMsg{Analysis: analysis, Err: err}
 	}
 }
@@ -227,14 +228,20 @@ func (m *model) handleVisionAnalysis(msg visionAnalysisMsg) tea.Cmd {
 	m.pendingVisionMsg = nil
 	m.conv.AnalyzingImages = false
 	if pending == nil {
+		log.QueueLog("handleVisionAnalysis: pending is nil, dropping")
 		return nil
 	}
 	if msg.Err != nil {
+		log.QueueLog("handleVisionAnalysis: error %v", msg.Err)
 		m.conv.AddNotice("Vision analysis failed: " + msg.Err.Error())
 		return tea.Batch(m.CommitMessages()...)
 	}
+	log.QueueLog("handleVisionAnalysis: analysis len=%d preview=%q", len(msg.Analysis), truncate(msg.Analysis, 80))
 	if strings.TrimSpace(msg.Analysis) != "" {
 		m.services.Reminder.Enqueue("Image analysis (from the vision model):\n" + msg.Analysis)
+		log.QueueLog("handleVisionAnalysis: enqueued vision analysis as reminder")
+	} else {
+		log.QueueLog("handleVisionAnalysis: analysis is empty, NOT enqueued")
 	}
 	// Strip images — the main model gets the text analysis instead of pixels.
 	pending.Images = nil
@@ -282,7 +289,7 @@ func (m *model) drainInputQueueWhileIdle() tea.Cmd {
 // On no-provider or ensureAgentSession failure, posts a notice and
 // returns a commit cmd (the agent is not contacted).
 func (m *model) SubmitToAgent(content string, images []core.Image) tea.Cmd {
-	log.QueueLog("SubmitToAgent: %q", truncate(content, 60))
+	log.QueueLog("SubmitToAgent: %q images=%d", truncate(content, 60), len(images))
 	if m.env.LLMProvider == nil {
 		return m.notifyNoProvider()
 	}

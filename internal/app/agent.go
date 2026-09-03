@@ -94,8 +94,24 @@ func (m *model) personaPrompt() system.Persona {
 // any new infrastructure.
 func swarmPersonaOverlay() system.Persona {
 	return system.Persona{
-		Behavior: "Swarm mode is active. For any non-trivial request, you MUST decompose the work into independent subtasks and dispatch them in parallel via the Agent tool in a single message (do not run them sequentially). Pick the right subagent for each subtask (e.g. researcher for investigation, test-agent for verification). Synthesize their results into the final answer. For trivial questions that need no decomposition, answer directly.\n\nFor any investigation that touches more than 1-2 files, traces call paths, or answers architecture/where-does-X-live questions, you MUST delegate to a `researcher` subagent (mode=explore) instead of reading/grepping yourself. You only receive the subagent's summary. The exception is a single direct Read/Grep when the exact file and target are already known.\n\nIf no existing agent definition fits a subtask's need, first create one in the global user folder: write `~/.pcb/agents/<name>/AGENT.md` via the Write tool with YAML frontmatter (`name`, `description`, `model: inherit`, `max_steps`) and a purposeful system prompt body. Then dispatch the new agent via the Agent tool in the same turn. Prefer the global `~/.pcb/agents/` over project `.pcb/agents/` for reusable agents.",
-		Rules:    "Never execute a multi-step task single-threaded when it can be split into parallel subtasks. Each subagent call must have a self-contained prompt with all context it needs. Wait for all parallel subagents before synthesizing. If a subtask depends on another's output, run the dependent one after the first completes.\n\nNever use your own Read/Grep/Glob for multi-file exploration in ModeSwarm — dispatch a researcher. Each delegation prompt must be self-contained with all context.\n\nWhen creating a new agent on the fly, keep the system prompt self-contained and specific to the subtask. After writing the file, reload is automatic — do not ask the user to restart.",
+		Behavior: "Swarm mode is active. You are the orchestrator — your job is to decompose work and dispatch to subagents, NOT to implement directly. For any non-trivial request, you MUST decompose the work into independent subtasks and dispatch them via the Agent tool. Pick the right subagent for each phase:\n\n" +
+			"- **planner** (mode=explore): Decompose a complex feature request into a structured task plan with file paths, approach, and dependencies. Use this FIRST for any feature implementation request.\n" +
+			"- **researcher** (mode=explore): Read-only investigation — finding where code lives, tracing call paths, architecture questions, gathering context across files.\n" +
+			"- **implementer** (mode=edit): Takes a single well-defined task and implements it fully — writes code, edits files, runs builds, verifies compilation. Dispatch one per task from the planner's output.\n" +
+			"- **tester** (mode=edit): Runs tests, analyzes failures with file:line references, classifies root causes. Dispatch AFTER implementers finish.\n\n" +
+			"Standard workflow for feature implementation:\n" +
+			"1. Dispatch `planner` with the user request → receive a structured task plan.\n" +
+			"2. Dispatch `implementer` agents (one per independent task, in parallel where possible) → each returns a completion report.\n" +
+			"3. Dispatch `tester` to verify the implementation → receive pass/fail report.\n" +
+			"4. If tests fail, dispatch `implementer` again with the specific failure details.\n" +
+			"5. Synthesize all results into a final answer for the user.\n\n" +
+			"Dispatch independent agents concurrently in a single message. Use background mode (run_in_background=true) for long-running tasks. Wait for all parallel agents before synthesizing. For trivial questions that need no decomposition, answer directly.\n\n" +
+			"For any investigation that touches more than 1-2 files, traces call paths, or answers architecture/where-does-X-live questions, you MUST delegate to a `researcher` subagent instead of reading/grepping yourself. You only receive the subagent's summary. The exception is a single direct Read/Grep when the exact file and target are already known.\n\n" +
+			"If no existing agent definition fits a subtask's need, first create one in the global user folder: write `~/.pcb/agents/<name>/AGENT.md` via the Write tool with YAML frontmatter (`name`, `description`, `model: inherit`, `max_steps`, `mode`) and a purposeful system prompt body. Then dispatch the new agent via the Agent tool in the same turn. Prefer the global `~/.pcb/agents/` over project `.pcb/agents/` for reusable agents.",
+		Rules: "Never execute a multi-step task single-threaded when it can be split into parallel subtasks. Each subagent call must have a self-contained prompt with all context it needs — include file paths, the planner's task spec, and any relevant context. Wait for all parallel subagents before synthesizing. If a subtask depends on another's output, run the dependent one after the first completes.\n\n" +
+			"Never use your own Read/Grep/Glob for multi-file exploration in ModeSwarm — dispatch a researcher. Each delegation prompt must be self-contained with all context.\n\n" +
+			"Never implement code yourself in ModeSwarm — dispatch an implementer agent. You are the orchestrator, not the implementer. The exception is creating new agent definition files (AGENT.md) which you write directly.\n\n" +
+			"When creating a new agent on the fly, keep the system prompt self-contained and specific to the subtask. After writing the file, reload is automatic — do not ask the user to restart.",
 	}
 }
 
@@ -530,10 +546,12 @@ func (m *model) dropImagesTextOnlyModelRejects(msgs []core.Message) []core.Messa
 
 func (m *model) sendToAgent(content string, images []core.Image) tea.Cmd {
 	if !m.services.Agent.Active() {
+		log.QueueLog("sendToAgent: agent NOT active, returning nil (reminders NOT drained)")
 		return nil
 	}
 	svc := m.services.Agent
 	content = m.attachPendingReminders(content)
+	log.QueueLog("sendToAgent: content len=%d has_reminders=%v", len(content), strings.Contains(content, "system-reminder"))
 	return func() tea.Msg {
 		svc.Send(content, images)
 		return nil
@@ -547,8 +565,10 @@ func (m *model) sendToAgent(content string, images []core.Image) tea.Cmd {
 func (m *model) attachPendingReminders(content string) string {
 	pending := m.services.Reminder.Drain()
 	if len(pending) == 0 {
+		log.QueueLog("attachPendingReminders: drained 0 reminders")
 		return content
 	}
+	log.QueueLog("attachPendingReminders: drained %d reminders", len(pending))
 	return reminder.AttachToContent(content, pending)
 }
 

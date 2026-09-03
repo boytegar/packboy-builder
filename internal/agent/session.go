@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/boytegar/packboy-builder/internal/core"
+	glog "github.com/boytegar/packboy-builder/internal/log"
 )
 
 type Session struct {
@@ -96,8 +97,10 @@ func (s *Session) Send(content string, images []core.Image) {
 	ag := s.agent
 	s.mu.RUnlock()
 	if ag == nil {
+		glog.QueueLog("Session.Send: agent is nil, SILENT DROP (content len=%d)", len(content))
 		return
 	}
+	glog.QueueLog("Session.Send: delivering content len=%d to agent inbox", len(content))
 	ag.Inbox() <- core.Message{Role: core.RoleUser, Content: content, Images: images}
 }
 

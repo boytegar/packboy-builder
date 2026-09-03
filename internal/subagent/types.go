@@ -332,9 +332,21 @@ type AgentConfig struct {
 	Skills       []string `yaml:"skills,omitempty" json:"skills,omitempty"`
 	SystemPrompt string   `yaml:"system-prompt,omitempty" json:"system_prompt,omitempty"`
 	MaxSteps     int      `yaml:"max-steps" json:"max_steps"`
-	Source       string   `yaml:"-" json:"source,omitempty"`
-	McpServers   []string `yaml:"mcp-servers,omitempty" json:"mcp_servers,omitempty"`
-	SourceFile   string   `yaml:"-" json:"-"`
+
+	// Complexity controls how hard the agent is allowed to reason.
+	// "light" = minimal reasoning, "medium" = balanced (default), "heavy" = deep reasoning.
+	// When empty, the agent inherits the parent's complexity or defaults to "medium".
+	Complexity string `yaml:"complexity,omitempty" json:"complexity,omitempty"`
+
+	// GeneralPurpose marks the agent as a flexible, multi-purpose agent
+	// that can handle any bounded task (research, implementation, testing,
+	// analysis) rather than being locked to a single role. General-purpose
+	// agents are preferred when the task doesn't fit a specialized role.
+	GeneralPurpose bool `yaml:"general_purpose,omitempty" json:"general_purpose,omitempty"`
+
+	Source     string   `yaml:"-" json:"source,omitempty"`
+	McpServers []string `yaml:"mcp-servers,omitempty" json:"mcp_servers,omitempty"`
+	SourceFile string   `yaml:"-" json:"-"`
 
 	// displayOnly marks a runtime-only base-template config whose Name is just a
 	// UI label. It is never loaded from an agent definition.

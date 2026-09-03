@@ -19,6 +19,7 @@ import (
 	"github.com/boytegar/packboy-builder/internal/task"
 	"github.com/boytegar/packboy-builder/internal/tool"
 	"github.com/boytegar/packboy-builder/internal/tool/perm"
+	"github.com/boytegar/packboy-builder/internal/tool/risk"
 	"github.com/boytegar/packboy-builder/internal/tool/toolresult"
 )
 
@@ -52,6 +53,8 @@ func (t *BashTool) PreparePermission(ctx context.Context, params map[string]any,
 	// Count lines in command
 	lineCount := strings.Count(command, "\n") + 1
 
+	riskClass := risk.Classify(command)
+
 	return &perm.PermissionRequest{
 		ID:          tool.GenerateRequestID(),
 		ToolName:    t.Name(),
@@ -61,6 +64,9 @@ func (t *BashTool) PreparePermission(ctx context.Context, params map[string]any,
 			Description:   description,
 			RunBackground: runBackground,
 			LineCount:     lineCount,
+			RiskLevel:     string(riskClass.Level),
+			RiskReason:    riskClass.Reason,
+			RiskSummary:   riskClass.Summary,
 		},
 	}, nil
 }

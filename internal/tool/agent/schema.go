@@ -78,6 +78,11 @@ var agentToolParameters = map[string]any{
 			"description": "Permission mode for the spawned agent: explore = read-only; edit = can modify files; default = use the named definition's configured mode, or inherit the parent session when name is empty.",
 			"enum":        []string{"explore", "edit", "default"},
 		},
+		"complexity": map[string]any{
+			"type":        "string",
+			"description": "Reasoning depth: light = minimal exploration, direct execution (mechanical edits, simple lookups); medium = balanced (default, most tasks); heavy = deep investigation (architectural changes, security-sensitive code). Overrides the agent's default complexity.",
+			"enum":        []string{"light", "medium", "heavy"},
+		},
 	},
 	"required": []string{"description", "prompt"},
 }
