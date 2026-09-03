@@ -3,6 +3,25 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v1.23.7] - 2026-08-26
+
+### Added
+- Session search functionality with fuzzy matching
+- Built-in skills library (accessibility, API design, CI/CD, code review, database design, debugging, deployment, Docker, documentation, error handling, git workflow, incident response, performance, refactoring, release management, security review, terminal UI, testing strategy, wiki generation)
+- Risk classification system for tool permission decisions
+- Spec mode exit tool for structured specification workflow
+- Vision forwarding test coverage
+
+### Changed
+- Update submit flow improvements
+- Agent session and subagent executor enhancements
+- AskUser tool with improved schema and interaction handling
+
+## [v1.23.6] - 2026-08-26
+
+### Changed
+- UI fixes and updates, agent crash + SUI update, scrollbar widget extraction, skill discovery expansion
+
 ## [v1.23.5] - 2026-08-25
 
 ### Fixed
