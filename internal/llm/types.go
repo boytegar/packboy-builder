@@ -8,6 +8,29 @@ import (
 	"github.com/boytegar/packboy-builder/internal/core"
 )
 
+// StandardEffort levels are the universal thinking/reasoning labels shown
+// to the user across every provider. Each provider maps these labels to
+// its own native API parameter via the ThinkingEffortProvider interface.
+const (
+	EffortNone   = "none"
+	EffortLow    = "low"
+	EffortMedium = "medium"
+	EffortHigh   = "high"
+	EffortXHigh  = "xhigh"
+)
+
+// StandardEfforts is the canonical ordered list of effort levels.
+// Providers that advertise thinking support should return this list
+// (or a subset) from ThinkingEfforts().
+var StandardEfforts = []string{EffortNone, EffortLow, EffortMedium, EffortHigh, EffortXHigh}
+
+// IsEffortActive returns true when the effort value represents a
+// non-off, non-empty thinking level.
+func IsEffortActive(effort string) bool {
+	e := strings.ToLower(strings.TrimSpace(effort))
+	return e != "" && e != EffortNone && e != "off"
+}
+
 // Name represents a provider name
 type Name string
 

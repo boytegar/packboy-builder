@@ -368,11 +368,13 @@ func NewAPIKeyClient(ctx context.Context) (llm.Provider, error) {
 func googleThinkingBudget(effort string) *int32 {
 	var b int
 	switch effort {
-	case "think":
+	case llm.EffortLow:
 		b = 5000
-	case "think+":
+	case llm.EffortMedium:
+		b = 16000
+	case llm.EffortHigh:
 		b = 32000
-	case "ultrathink":
+	case llm.EffortXHigh:
 		b = 128000
 	default:
 		return nil
@@ -382,11 +384,11 @@ func googleThinkingBudget(effort string) *int32 {
 }
 
 func (c *Client) ThinkingEfforts(model string) []string {
-	return []string{"off", "think", "think+", "ultrathink"}
+	return []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh}
 }
 
 func (c *Client) DefaultThinkingEffort(model string) string {
-	return "off"
+	return llm.EffortNone
 }
 
 // Ensure Client implements Provider

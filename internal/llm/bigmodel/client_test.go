@@ -93,7 +93,7 @@ func TestBigModelThinkingExtraBody(t *testing.T) {
 	payload := streamRequestBody(t, c, llm.CompletionOptions{
 		Model:          "glm-5.1",
 		Messages:       []core.Message{{Role: core.RoleUser, Content: "hi"}},
-		ThinkingEffort: "medium",
+		ThinkingEffort: llm.EffortMedium,
 	}, transport)
 
 	thinking, ok := payload["thinking"].(map[string]any)
@@ -106,7 +106,7 @@ func TestBigModelThinkingExtraBody(t *testing.T) {
 }
 
 func TestBigModelNoThinkingWhenEffortNone(t *testing.T) {
-	for _, effort := range []string{"", "none", "off"} {
+	for _, effort := range []string{"", llm.EffortNone, "off"} {
 		t.Run("effort="+effort, func(t *testing.T) {
 			transport := &captureTransport{}
 			c := newTestClient(transport)
@@ -320,7 +320,7 @@ func TestBigModelThinkingEffortsForThinkingModel(t *testing.T) {
 	if len(efforts) == 0 {
 		t.Fatal("expected thinking efforts for glm-5.1")
 	}
-	if c.DefaultThinkingEffort("glm-5.1") != "medium" {
-		t.Fatalf("expected default medium, got %q", c.DefaultThinkingEffort("glm-5.1"))
+	if c.DefaultThinkingEffort("glm-5.1") != llm.EffortMedium {
+		t.Fatalf("expected default %s, got %q", llm.EffortMedium, c.DefaultThinkingEffort("glm-5.1"))
 	}
 }

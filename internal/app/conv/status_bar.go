@@ -214,7 +214,6 @@ type OperationModeParams struct {
 	ShowContextBar    bool // render the visual [██████░░░░] 71% bar (opt-in)
 	Width             int
 	ThinkingEffort    string
-	ShowThinking      bool
 	ReviewApprovals   int  // auto-review approvals this session, shown next to the mode
 	ReviewEscalations int  // auto-review escalations to the user this session
 	AutopilotThinking bool // the copilot is mid-decision — show "thinking…" on the mode indicator
@@ -232,12 +231,6 @@ func RenderModeStatus(params OperationModeParams) string {
 		leftParts = append(leftParts, modeStatus)
 	}
 
-	if params.ShowThinking {
-		if thinkingStatus := RenderThinkingIndicator(params.ThinkingEffort); thinkingStatus != "" {
-			leftParts = append(leftParts, thinkingStatus)
-		}
-	}
-
 	left := strings.Join(leftParts, "  ")
 
 	right := renderStatusCluster(params)
@@ -247,12 +240,20 @@ func RenderModeStatus(params OperationModeParams) string {
 		primary = left + strings.Repeat(" ", gap) + right
 	}
 
-	// Bypass renders on a second line below the mode row so the context count
-	// on the primary line's right edge stays visible.
+	// Second line: effort badge on the left, bypass indicator to its right
+	// when /yolo is on. Effort lives only here (not on the model line) so it
+	// is never duplicated.
+	var secondParts []string
+	if effortBadge := RenderEffortBadge(params.ThinkingEffort); effortBadge != "" {
+		secondParts = append(secondParts, "  "+effortBadge)
+	}
 	if params.Bypass {
 		if bypassStatus := RenderBypassIndicator(); bypassStatus != "" {
-			return primary + "\n" + bypassStatus + RenderPersonaTag(params.Persona)
+			secondParts = append(secondParts, bypassStatus)
 		}
+	}
+	if len(secondParts) > 0 {
+		return primary + "\n" + strings.Join(secondParts, " ") + RenderPersonaTag(params.Persona)
 	}
 	return primary
 }
@@ -287,26 +288,37 @@ func renderStatusCluster(p OperationModeParams) string {
 	muted := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted)
 	sep := muted.Render(" · ")
 
-	// Priority 1 = most important (dropped last). The model name always
-	// renders; everything else drops before it under width pressure.
+	// Priority is the drop order: 1 = stickiest (drops last), larger drops first.
+	// Token usage (ctx label + context bar) is sticky so the user keeps their context
+	// budget visible even when the terminal narrows; the model name drops first.
+	const (
+		prioContextBar    = 1 // sticky: the [bar] 71% visual
+		prioContextLabel  = 1 // sticky: the ctx X/Y label
+		prioCompressions  = 2
+		prioStatusMessage = 3
+		prioCost          = 4
+		prioWriteModel    = 5
+		prioModelName     = 6 // drops first when width is tight
+	)
+
 	segments := []statusSegment{
-		{text: muted.Render(p.ModelName), priority: 1},
+		{text: muted.Render(p.ModelName), priority: prioModelName},
 	}
 	if p.WriteModelName != "" && p.WriteModelName != p.ModelName {
 		segments = append(segments, statusSegment{
 			text:     muted.Render("✎ " + p.WriteModelName),
-			priority: 2,
+			priority: prioWriteModel,
 		})
 	}
 	if p.StatusMessage != "" {
-		segments = append(segments, statusSegment{text: muted.Render(p.StatusMessage), priority: 3})
+		segments = append(segments, statusSegment{text: muted.Render(p.StatusMessage), priority: prioStatusMessage})
 	}
 
 	// The numeric label always renders — it falls back to "ctx X/--" when the
 	// limit is unknown, so the slot stays visible instead of silently hiding.
 	segments = append(segments, statusSegment{
 		text:     RenderContextLabel(p.InputTokens, p.InputLimit),
-		priority: 3,
+		priority: prioContextLabel,
 	})
 
 	// The visual bar is opt-in (off by default). When shown it also carries
@@ -318,14 +330,14 @@ func renderStatusCluster(p OperationModeParams) string {
 				bar += sep + muted.Render(hint)
 			}
 		}
-		segments = append(segments, statusSegment{text: bar, priority: 4})
+		segments = append(segments, statusSegment{text: bar, priority: prioContextBar})
 	}
 
 	if badge := RenderCompressionsBadge(p.Compressions); badge != "" {
-		segments = append(segments, statusSegment{text: badge, priority: 5})
+		segments = append(segments, statusSegment{text: badge, priority: prioCompressions})
 	}
 	if !p.ConversationCost.IsZero() {
-		segments = append(segments, statusSegment{text: muted.Render(kit.FormatCostTotal(p.ConversationCost)), priority: 6})
+		segments = append(segments, statusSegment{text: muted.Render(kit.FormatCostTotal(p.ConversationCost)), priority: prioCost})
 	}
 
 	survivors := fitStatusSegments(segments, p.Width, lipgloss.Width(sep))
@@ -352,8 +364,8 @@ func RenderOperationModeIndicator(mode setting.OperationMode, reviewApprovals, r
 
 	switch mode {
 	case setting.ModeNormal:
-		icon = "●"
-		label = " default mode"
+		icon = ""
+		label = "default mode"
 		clr = kit.CurrentTheme.Muted
 	case setting.ModeReadOnly:
 		icon = "🔒"
@@ -401,4 +413,15 @@ func RenderThinkingIndicator(effort string) string {
 	style := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted)
 	hint := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Muted).Render(" (ctrl+t to cycle)")
 	return "  " + style.Render("✦ "+effort) + hint
+}
+
+// RenderEffortBadge produces a compact "effort: high" label rendered above
+// the text input so the active thinking level is always visible.
+func RenderEffortBadge(effort string) string {
+	if effort == "" {
+		effort = llm.EffortNone
+	}
+	labelStyle := lipgloss.NewStyle().Foreground(kit.CurrentTheme.TextDim)
+	valueStyle := lipgloss.NewStyle().Foreground(kit.CurrentTheme.Focus).Bold(true)
+	return labelStyle.Render("effort: ") + valueStyle.Render(effort)
 }

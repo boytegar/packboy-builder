@@ -6,14 +6,15 @@ import (
 	"github.com/boytegar/packboy-builder/internal/llm"
 )
 
+// Legacy aliases kept for backward-compat with persisted providers.json values.
 const (
-	ThinkingOff    = "off"
-	ThinkingNormal = "think"
-	ThinkingHigh   = "think+"
-	ThinkingUltra  = "ultrathink"
+	ThinkingOff    = llm.EffortNone
+	ThinkingNormal = llm.EffortLow
+	ThinkingHigh   = llm.EffortHigh
+	ThinkingUltra  = llm.EffortXHigh
 )
 
-var thinkingEfforts = []string{ThinkingOff, ThinkingNormal, ThinkingHigh, ThinkingUltra}
+var thinkingEfforts = []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh}
 
 type catalogEntry struct {
 	match            func(string) bool
@@ -93,7 +94,7 @@ func (c *Client) DefaultThinkingEffort(model string) string {
 	if !supportsThinkingModel(model) {
 		return ""
 	}
-	return ThinkingOff
+	return llm.EffortNone
 }
 
 func CatalogModel(modelID string) (llm.ModelInfo, bool) {

@@ -225,6 +225,58 @@ func TestFitStatusSegments_AccountsForSeparatorWidth(t *testing.T) {
 	}
 }
 
+func TestRenderStatusCluster_TokenUsageIsSticky(t *testing.T) {
+	// Token usage (ctx label + context bar) must be the last thing to disappear
+	// when the terminal narrows — the model name is allowed to drop instead.
+	// Regression guard for sticky token-usage on narrow widths.
+	cases := []struct {
+		name  string
+		width int
+	}{
+		{"narrow-40", 40},
+		{"narrow-30", 30},
+		{"narrow-25", 25},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out := stripANSI(RenderModeStatus(OperationModeParams{
+				ModelName:      "gpt-test-long-name",
+				InputTokens:    142_000,
+				InputLimit:     200_000,
+				ShowContextBar: true,
+				Width:          c.width,
+			}))
+			// ctx label must survive at all narrow widths — it is the sticky token-usage signal
+			if !strings.Contains(out, "ctx") {
+				t.Errorf("ctx label must be sticky at width %d; got %q", c.width, out)
+			}
+			// the model name must drop before the token usage does
+			if strings.Contains(out, "gpt-test-long-name") {
+				t.Errorf("model name should drop at width %d to keep token usage visible; got %q", c.width, out)
+			}
+		})
+	}
+}
+
+// At a medium-narrow width the context bar should still render alongside the ctx label.
+// The model name may also fit at this width — the guarantee under test is that the bar
+// is not prematurely dropped while room remains.
+func TestRenderStatusCluster_ContextBarSurvivesAtMediumWidth(t *testing.T) {
+	out := stripANSI(RenderModeStatus(OperationModeParams{
+		ModelName:      "gpt-test-long-name",
+		InputTokens:    142_000,
+		InputLimit:     200_000,
+		ShowContextBar: true,
+		Width:          70,
+	}))
+	if !strings.Contains(out, "ctx") {
+		t.Errorf("ctx label must survive at width 70; got %q", out)
+	}
+	if !strings.Contains(out, "[") {
+		t.Errorf("context bar must survive at width 70; got %q", out)
+	}
+}
+
 func TestRenderOperationModeIndicator_AutoPilotCounts(t *testing.T) {
 	cases := []struct {
 		name        string

@@ -1,6 +1,10 @@
 package anthropic
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/boytegar/packboy-builder/internal/llm"
+)
 
 func TestCatalogModelThinkingSupport(t *testing.T) {
 	tests := []struct {
@@ -52,10 +56,12 @@ func TestAnthropicThinkingBudget(t *testing.T) {
 		effort string
 		want   int
 	}{
-		{model: "claude-opus-4-1-20250805", effort: ThinkingNormal, want: 5000},
-		{model: "claude-sonnet-4@20250514", effort: ThinkingUltra, want: 128000},
-		{model: "claude-3-5-haiku-20241022", effort: ThinkingUltra, want: 0},
-		{model: "unknown-model", effort: ThinkingHigh, want: 0},
+		{model: "claude-opus-4-1-20250805", effort: llm.EffortLow, want: 5000},
+		{model: "claude-sonnet-4@20250514", effort: llm.EffortXHigh, want: 128000},
+		{model: "claude-opus-4-1-20250805", effort: llm.EffortMedium, want: 16000},
+		{model: "claude-opus-4-1-20250805", effort: llm.EffortHigh, want: 32000},
+		{model: "claude-3-5-haiku-20241022", effort: llm.EffortXHigh, want: 0},
+		{model: "unknown-model", effort: llm.EffortHigh, want: 0},
 	}
 
 	for _, tt := range tests {

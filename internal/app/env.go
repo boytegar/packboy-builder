@@ -201,23 +201,34 @@ func (m *env) DetectThinkingKeywords(input string) {
 		return
 	}
 
-	if strings.Contains(lower, "ultrathink") ||
-		strings.Contains(lower, "think really hard") ||
-		strings.Contains(lower, "think super hard") ||
-		strings.Contains(lower, "maximum thinking") {
-		m.ThinkingEffort = efforts[len(efforts)-1]
-		return
+	// Map keyword triggers to explicit effort labels so the detection
+	// no longer depends on array position (which shifts when levels change).
+	keywordToEffort := map[string]string{
+		"ultrathink":        llm.EffortXHigh,
+		"think really hard": llm.EffortXHigh,
+		"think super hard":  llm.EffortXHigh,
+		"maximum thinking":  llm.EffortXHigh,
+		"think harder":      llm.EffortHigh,
+		"think hard":        llm.EffortHigh,
+		"think deeply":      llm.EffortHigh,
+		"think carefully":   llm.EffortHigh,
 	}
 
-	if strings.Contains(lower, "think harder") ||
-		strings.Contains(lower, "think hard") ||
-		strings.Contains(lower, "think deeply") ||
-		strings.Contains(lower, "think carefully") {
-		if len(efforts) >= 2 {
-			m.ThinkingEffort = efforts[len(efforts)-2]
+	for keyword, effort := range keywordToEffort {
+		if strings.Contains(lower, keyword) && containsEffort(efforts, effort) {
+			m.ThinkingEffort = effort
+			return
 		}
-		return
 	}
+}
+
+func containsEffort(efforts []string, effort string) bool {
+	for _, e := range efforts {
+		if strings.EqualFold(e, effort) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *env) ApplyModePermissions(cwd string) {

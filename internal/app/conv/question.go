@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	xansi "github.com/charmbracelet/x/ansi"
 
 	"github.com/boytegar/packboy-builder/internal/app/kit"
 	"github.com/boytegar/packboy-builder/internal/tool"
@@ -368,6 +369,26 @@ func getQuestionTabAnsweredStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(kit.CurrentTheme.Success)
 }
 
+// wrapQuestionText wraps a (possibly styled) text to the given width, preserving
+// ANSI escape sequences on each wrapped line. It mirrors the xansi.Wrap pattern
+// used in tool_render.go so long question/header text flows onto new lines
+// instead of overflowing the available content width.
+func wrapQuestionText(styled string, width int) string {
+	if width < 1 {
+		return styled
+	}
+	var wrapped strings.Builder
+	first := true
+	for segment := range strings.SplitSeq(xansi.Wrap(styled, width, " "), "\n") {
+		if !first {
+			wrapped.WriteString("\n ")
+		}
+		wrapped.WriteString(segment)
+		first = false
+	}
+	return wrapped.String()
+}
+
 // Render renders the question prompt
 func (p *QuestionPrompt) Render() string {
 	if !p.active || p.request == nil {
@@ -412,13 +433,20 @@ func (p *QuestionPrompt) Render() string {
 		sb.WriteString("\n")
 	}
 
-	header := getQuestionHeaderStyle().Render(currentQ.Header)
+	// Reserve a 1-column left gutter (the leading " " below) when wrapping.
+	textWidth := contentWidth - 1
+	if textWidth < 20 {
+		textWidth = 20
+	}
+
+	header := wrapQuestionText(getQuestionHeaderStyle().Render(currentQ.Header), textWidth)
 	sb.WriteString(" ")
 	sb.WriteString(header)
 	sb.WriteString("\n")
 
+	question := wrapQuestionText(getQuestionTextStyle().Render(currentQ.Question), textWidth)
 	sb.WriteString(" ")
-	sb.WriteString(getQuestionTextStyle().Render(currentQ.Question))
+	sb.WriteString(question)
 	sb.WriteString("\n\n")
 
 	isMulti := currentQ.MultiSelect

@@ -37,8 +37,8 @@ func (p *testThinkingProvider) DefaultThinkingEffort(string) string { return p.d
 func TestCtrlTCyclesThinkingEffort(t *testing.T) {
 	m := &model{}
 	m.env.LLMProvider = &testThinkingProvider{
-		efforts: []string{"none", "low", "medium", "high"},
-		def:     "none",
+		efforts: []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh},
+		def:     llm.EffortNone,
 	}
 	m.env.CurrentModel = &llm.CurrentModelInfo{ModelID: "test-model", Provider: llm.OpenAI}
 
@@ -49,8 +49,8 @@ func TestCtrlTCyclesThinkingEffort(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("Ctrl+T should update the model label without a status message")
 	}
-	if m.env.ThinkingEffort != "low" {
-		t.Fatalf("ThinkingEffort = %q, want low", m.env.ThinkingEffort)
+	if m.env.ThinkingEffort != llm.EffortLow {
+		t.Fatalf("ThinkingEffort = %q, want %s", m.env.ThinkingEffort, llm.EffortLow)
 	}
 	if m.userInput.Provider.StatusMessage != "" {
 		t.Fatalf("StatusMessage = %q, want empty", m.userInput.Provider.StatusMessage)

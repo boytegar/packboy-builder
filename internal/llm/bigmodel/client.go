@@ -40,7 +40,7 @@ func (c *Client) ThinkingEfforts(model string) []string {
 	if !supportsThinking(model) {
 		return nil
 	}
-	return []string{"none", "low", "medium", "high"}
+	return []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh}
 }
 
 func (c *Client) DefaultThinkingEffort(model string) string {
@@ -85,7 +85,7 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 			if !supportsThinking(opts.Model) {
 				return
 			}
-			if opts.ThinkingEffort != "" && opts.ThinkingEffort != "off" && opts.ThinkingEffort != "none" {
+			if llm.IsEffortActive(opts.ThinkingEffort) {
 				params.SetExtraFields(map[string]any{
 					"thinking": map[string]any{"type": "enabled"},
 				})

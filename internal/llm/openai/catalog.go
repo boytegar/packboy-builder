@@ -6,9 +6,9 @@ import (
 	"github.com/boytegar/packboy-builder/internal/llm"
 )
 
-var reasoningEfforts = []string{"none", "low", "medium", "high", "xhigh"}
-var gpt56ReasoningEfforts = []string{"none", "low", "medium", "high", "xhigh", "max"}
-var highOnlyReasoningEfforts = []string{"high"}
+var reasoningEfforts = []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh}
+var gpt56ReasoningEfforts = []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh, "max"}
+var highOnlyReasoningEfforts = []string{llm.EffortHigh}
 
 func (c *Client) ThinkingEfforts(model string) []string {
 	return openAIThinkingEfforts(model)
@@ -21,7 +21,7 @@ func (c *Client) DefaultThinkingEffort(model string) string {
 	case 1:
 		return efforts[0]
 	default:
-		return "medium"
+		return llm.EffortMedium
 	}
 }
 
