@@ -41,7 +41,7 @@ func agentSchema(agentDirectory string) core.ToolSchema {
 		sb.WriteString("\n\n")
 	}
 	sb.WriteString("Brief the agent with focused context: state the objective/question, relevant paths or symbols, known context, constraints, stop condition, and concise output format (include file:line refs). Always name the exact file path(s) the agent must analyse, plus the files related to each one (callers, implementations, tests, configs). Do not ask it to broadly search the codebase. Use explore for read-only investigation and edit for file changes.\n\n")
-	sb.WriteString("Launch independent agents concurrently. Use background mode only for work that does not block your next step. Verify the result before reporting it.")
+	sb.WriteString("Launch independent agents concurrently. Use background mode only for work that does not block your next step. Verify the result before reporting it. Brief the agent with all context it needs to succeed.")
 
 	return core.ToolSchema{
 		Name:        "Agent",

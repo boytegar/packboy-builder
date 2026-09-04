@@ -816,7 +816,7 @@ func subagentPermissionFunc(mode PermissionMode, allowRules, denyRules ToolList)
 		// may narrow its tools but cannot elevate it to workspace mutation.
 		if mode == PermissionExplore {
 			switch {
-			case perm.IsSafeTool(name), name == tool.ToolSendMessage, name == tool.ToolSkill:
+			case perm.IsSafeTool(name), mcp.IsMCPReadOnlyTool(name), name == tool.ToolSendMessage, name == tool.ToolSkill:
 				return true, ""
 			case name == tool.ToolBash:
 				command, _ := input["command"].(string)
@@ -829,6 +829,9 @@ func subagentPermissionFunc(mode PermissionMode, allowRules, denyRules ToolList)
 		// Communication carve-out (see doc comment): a mode-gated worker may
 		// always reach main or a peer via SendMessage. A worker with an explicit
 		// allow_tools list is governed by that list instead.
+		if mcp.IsMCPReadOnlyTool(name) {
+			return true, ""
+		}
 		if name == tool.ToolSendMessage && allowRules == nil {
 			return true, ""
 		}
@@ -895,7 +898,7 @@ func modeAllowsSchema(mode PermissionMode, name string) bool {
 	// mode-gated worker can report to main (the gate permits it — see
 	// subagentPermissionFunc). A worker with an explicit allow_tools list takes
 	// the whitelist branch in filterSchemasForPermission instead of this one.
-	if perm.IsSafeTool(name) || name == tool.ToolSendMessage {
+	if perm.IsSafeTool(name) || mcp.IsMCPReadOnlyTool(name) || name == tool.ToolSendMessage {
 		return true
 	}
 	switch mode {

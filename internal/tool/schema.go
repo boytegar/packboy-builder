@@ -25,6 +25,7 @@ const (
 
 	ToolEvolve = "Evolve"
 	ToolLSP    = "LSP"
+	ToolGraph  = "Graph"
 )
 
 // IsAgentToolName reports whether the tool name represents an agent-like worker tool.
@@ -68,6 +69,7 @@ var builtinToolOrder = []string{
 	ToolAgent, ToolAgentStop, ToolSendMessage,
 	ToolTaskCreate, ToolTaskGet, ToolTaskUpdate,
 	ToolCron,
+	ToolGraph,
 }
 
 // GetToolSchemas returns core.ToolSchema definitions for all registered tools

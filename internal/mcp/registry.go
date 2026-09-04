@@ -757,6 +757,38 @@ func IsMCPTool(name string) bool {
 	return ok
 }
 
+// readOnlyMCPToolPrefixes lists common read-only MCP tool name prefixes.
+// An MCP tool whose name starts with one of these (case-insensitive) is
+// treated as read-only and allowed in every permission mode.
+var readOnlyMCPToolPrefixes = []string{
+	"read", "get", "list", "search", "query", "fetch", "view", "show",
+	"status", "info", "describe", "inspect", "find", "grep", "glob",
+	"head", "peek", "stat", "ls", "cat", "who", "what", "where",
+}
+
+// IsMCPReadOnlyTool reports whether the MCP tool name represents a read-only
+// operation. It parses the tool name part (after the server prefix) and checks
+// it against common read-only verb prefixes. Write-like tools are excluded.
+func IsMCPReadOnlyTool(name string) bool {
+	_, toolName, ok := parseMCPToolName(name)
+	if !ok {
+		return false
+	}
+	toolName = strings.ToLower(toolName)
+	// Reject obvious write verbs first.
+	for _, w := range []string{"write", "edit", "create", "update", "delete", "insert", "set", "put", "post", "remove", "apply", "execute", "run", "push", "send", "invoke", "call", "trigger", "start", "stop", "restart", "kill", "close", "disconnect", "drop", "truncate", "wipe", "clear", "reset"} {
+		if strings.HasPrefix(toolName, w) {
+			return false
+		}
+	}
+	for _, p := range readOnlyMCPToolPrefixes {
+		if strings.HasPrefix(toolName, p) {
+			return true
+		}
+	}
+	return false
+}
+
 // SetConnecting marks or unmarks a server as currently connecting.
 // On failure, call SetConnectError to store the error; List() will report StatusError.
 func (r *Registry) SetConnecting(name string, val bool) {
