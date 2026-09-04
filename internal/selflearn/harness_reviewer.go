@@ -27,9 +27,9 @@ type HarnessRefineFunc func(snapshot []core.Message, instructions string)
 // It is composed alongside the existing reviewer; the base Reviewer.Observe
 // continues to handle memory + skill review.
 type HarnessReviewer struct {
-	harnessEnabled bool
-	harnessRefine  HarnessRefineFunc
-	harnessMu      sync.Mutex
+	harnessEnabled  bool
+	harnessRefine   HarnessRefineFunc
+	harnessMu       sync.Mutex
 	harnessInFlight bool
 }
 

@@ -25,27 +25,27 @@ type RefinementEdit struct {
 	Content   string           `json:"content,omitempty"`
 	Path      string           `json:"path,omitempty"`
 	Reference map[string]any   `json:"reference,omitempty"`
-	Arguments map[string]any    `json:"arguments,omitempty"`
-	Metadata  map[string]any    `json:"metadata,omitempty"`
+	Arguments map[string]any   `json:"arguments,omitempty"`
+	Metadata  map[string]any   `json:"metadata,omitempty"`
 	Reason    string           `json:"reason,omitempty"`
 }
 
 // RefinementProposal is the model's refinement plan.
 type RefinementProposal struct {
-	Summary        string            `json:"summary"`
-	Rationale      string            `json:"rationale"`
-	Edits          []RefinementEdit  `json:"edits"`
+	Summary         string           `json:"summary"`
+	Rationale       string           `json:"rationale"`
+	Edits           []RefinementEdit `json:"edits"`
 	ExpectedOutcome string           `json:"expectedOutcome"`
 }
 
 // AppliedRefinementEdit extends RefinementEdit with the result of applying it.
 type AppliedRefinementEdit struct {
 	RefinementEdit
-	ID     string       `json:"id"`
-	Before *HarnessEntry `json:"before,omitempty"`
-	After  *HarnessEntry `json:"after,omitempty"`
-	Applied bool         `json:"applied"`
-	Error   string       `json:"error,omitempty"`
+	ID      string        `json:"id"`
+	Before  *HarnessEntry `json:"before,omitempty"`
+	After   *HarnessEntry `json:"after,omitempty"`
+	Applied bool          `json:"applied"`
+	Error   string        `json:"error,omitempty"`
 }
 
 // RefinementResult is the outcome of applying a proposal.
@@ -392,8 +392,8 @@ func RollbackResult(st *HarnessState, target *RefinementResult) *RefinementResul
 // NormalizeProposal parses an untrusted map (from LLM JSON) into a typed proposal.
 func NormalizeProposal(raw map[string]any) RefinementProposal {
 	p := RefinementProposal{
-		Summary:        getString(raw, "summary", "Refined continual harness state"),
-		Rationale:      getString(raw, "rationale", ""),
+		Summary:         getString(raw, "summary", "Refined continual harness state"),
+		Rationale:       getString(raw, "rationale", ""),
 		ExpectedOutcome: getString(raw, "expectedOutcome", ""),
 	}
 
@@ -405,8 +405,8 @@ func NormalizeProposal(raw map[string]any) RefinementProposal {
 			}
 			p.Edits = append(p.Edits, RefinementEdit{
 				Action:    RefinementAction(getString(em, "action", "")),
-				Kind:       RefinementKind(getString(em, "kind", "")),
-				ID:         getString(em, "id", ""),
+				Kind:      RefinementKind(getString(em, "kind", "")),
+				ID:        getString(em, "id", ""),
 				Title:     getString(em, "title", ""),
 				Content:   getString(em, "content", ""),
 				Path:      getString(em, "path", ""),

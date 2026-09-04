@@ -44,19 +44,19 @@ const (
 
 // HarnessEntry is a single editable supplemental state record.
 type HarnessEntry struct {
-	ID        string            `json:"id"`
-	Kind      RefinementKind    `json:"kind"`
-	Title     string            `json:"title"`
-	Content   string            `json:"content"`
-	Path      string            `json:"path,omitempty"`
-	Scope     HarnessScope      `json:"scope,omitempty"`
-	Reference map[string]any    `json:"reference,omitempty"`
-	Arguments map[string]any    `json:"arguments,omitempty"`
-	Metadata  map[string]any    `json:"metadata,omitempty"`
-	Source    string            `json:"source,omitempty"`
-	CreatedAt string            `json:"created_at"`
-	UpdatedAt string            `json:"updated_at"`
-	Version   int               `json:"version"`
+	ID        string         `json:"id"`
+	Kind      RefinementKind `json:"kind"`
+	Title     string         `json:"title"`
+	Content   string         `json:"content"`
+	Path      string         `json:"path,omitempty"`
+	Scope     HarnessScope   `json:"scope,omitempty"`
+	Reference map[string]any `json:"reference,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	Source    string         `json:"source,omitempty"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
+	Version   int            `json:"version"`
 }
 
 // HarnessRefinementEvent records a completed refinement for audit and rollback.
@@ -71,9 +71,9 @@ type HarnessRefinementEvent struct {
 
 // HarnessState is the full persisted harness for a scope (local or global).
 type HarnessState struct {
-	Schema      int                                      `json:"schema"`
+	Schema      int                                        `json:"schema"`
 	Entries     map[RefinementKind]map[string]HarnessEntry `json:"entries"`
-	Refinements []HarnessRefinementEvent                  `json:"refinements"`
+	Refinements []HarnessRefinementEvent                   `json:"refinements"`
 }
 
 // EmptyHarnessState returns a initialised, empty harness state.

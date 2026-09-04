@@ -74,29 +74,29 @@ func TestMergeHarnessStates(t *testing.T) {
 	global := EmptyHarnessState()
 	global.Entries[KindMemory]["global-note"] = HarnessEntry{
 		ID:      "global-note",
-		Kind:     KindMemory,
-		Title:    "Global Note",
-		Content:  "A global memory",
-		Scope:    ScopeGlobal,
-		Version:  1,
+		Kind:    KindMemory,
+		Title:   "Global Note",
+		Content: "A global memory",
+		Scope:   ScopeGlobal,
+		Version: 1,
 	}
 
 	local := EmptyHarnessState()
 	local.Entries[KindMemory]["local-note"] = HarnessEntry{
 		ID:      "local-note",
-		Kind:     KindMemory,
-		Title:    "Local Note",
-		Content:  "A local memory",
-		Scope:    ScopeLocal,
-		Version:  1,
+		Kind:    KindMemory,
+		Title:   "Local Note",
+		Content: "A local memory",
+		Scope:   ScopeLocal,
+		Version: 1,
 	}
 	local.Entries[KindMemory]["global-note"] = HarnessEntry{
 		ID:      "global-note",
-		Kind:     KindMemory,
-		Title:    "Overridden Global",
-		Content:  "A local override of a global memory",
-		Scope:    ScopeLocal,
-		Version:  2,
+		Kind:    KindMemory,
+		Title:   "Overridden Global",
+		Content: "A local override of a global memory",
+		Scope:   ScopeLocal,
+		Version: 2,
 	}
 
 	merged := MergeHarnessStates(global, local)
@@ -196,10 +196,10 @@ func TestValidateEdit(t *testing.T) {
 		{
 			name: "skill without reference",
 			edit: RefinementEdit{
-				Action:   ActionCreate,
-				Kind:     KindSkill,
-				Title:    "Test Skill",
-				Content:  "Content",
+				Action:    ActionCreate,
+				Kind:      KindSkill,
+				Title:     "Test Skill",
+				Content:   "Content",
 				Arguments: map[string]any{},
 			},
 			wantErr: true,
@@ -239,8 +239,8 @@ func TestApplyRefinementProposal(t *testing.T) {
 	st := EmptyHarnessState()
 
 	proposal := RefinementProposal{
-		Summary:        "Test refinement",
-		Rationale:      "Testing",
+		Summary:         "Test refinement",
+		Rationale:       "Testing",
 		ExpectedOutcome: "Should create a memory",
 		Edits: []RefinementEdit{
 			{
@@ -370,10 +370,10 @@ func TestAppendAndLoadRefinementHistory(t *testing.T) {
 	dir := t.TempDir()
 
 	result := &RefinementResult{
-		ID:         "test-result-1",
-		Summary:    "Test refinement",
-		Rationale:  "Testing",
-		Scope:      ScopeLocal,
+		ID:        "test-result-1",
+		Summary:   "Test refinement",
+		Rationale: "Testing",
+		Scope:     ScopeLocal,
 		AppliedEdits: []AppliedRefinementEdit{
 			{
 				RefinementEdit: RefinementEdit{
@@ -460,11 +460,11 @@ func TestFormatHarnessStateForPrompt(t *testing.T) {
 	st := EmptyHarnessState()
 	st.Entries[KindMemory]["test"] = HarnessEntry{
 		ID:      "test",
-		Kind:     KindMemory,
-		Title:    "Test Memory",
-		Content:  "A test memory entry for validation",
-		Scope:    ScopeLocal,
-		Version:  1,
+		Kind:    KindMemory,
+		Title:   "Test Memory",
+		Content: "A test memory entry for validation",
+		Scope:   ScopeLocal,
+		Version: 1,
 	}
 
 	output := FormatHarnessStateForPrompt(st, FormatOptions{})
