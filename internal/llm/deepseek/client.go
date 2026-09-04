@@ -46,14 +46,14 @@ func (c *Client) ThinkingEfforts(model string) []string {
 	if !supportsThinking(model) {
 		return nil
 	}
-	return []string{"off", "high", "max"}
+	return []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh}
 }
 
 func (c *Client) DefaultThinkingEffort(model string) string {
 	if !supportsThinking(model) {
 		return ""
 	}
-	return "off"
+	return llm.EffortNone
 }
 
 // Stream sends a completion request and returns a channel of streaming chunks.
@@ -65,7 +65,7 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 		Options:          opts,
 		ConvertAssistant: makeAssistantConverter(thinking),
 		ConfigureParams: func(params *openai.ChatCompletionNewParams) {
-			if thinking && opts.ThinkingEffort != "" && opts.ThinkingEffort != "off" {
+			if thinking && llm.IsEffortActive(opts.ThinkingEffort) {
 				params.SetExtraFields(map[string]any{
 					"reasoning_effort": opts.ThinkingEffort,
 				})

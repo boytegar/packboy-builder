@@ -307,7 +307,8 @@ func (m model) renderInputView() string {
 	return prompt + hangComposerRows(m.userInput.RenderTextarea())
 }
 
-// renderImageBadgeLine renders one truncated-filename badge per pending image
+// renderEffortLine produces a compact "effort: high" label shown above the
+// text input so the user can always see the active thinking effort level.
 // on the reserved image/warning line, left-aligned with the textarea gutter.
 // Returns "" when no images are pending so no blank line is inserted. Each
 // badge mirrors the inline token's label (e.g. "[iniga-.png #2]") so the
@@ -451,11 +452,6 @@ func (m *model) renderTrackerList() string {
 func (m model) renderModeStatus() string {
 	modelName := m.env.GetModelDisplayName()
 	thinkingEffort := m.env.EffectiveThinkingEffort()
-	showThinking := true
-	if m.env.CurrentModel != nil && m.env.CurrentModel.Provider == llm.OpenAI && thinkingEffort != "" {
-		modelName += " (" + thinkingEffort + ")"
-		showThinking = false
-	}
 	if status := m.services.Hook.CurrentStatusMessageSafe(); status != "" {
 		modelName = status
 	}
@@ -490,7 +486,6 @@ func (m model) renderModeStatus() string {
 		ShowContextBar:    m.env.ShowContextBar,
 		Width:             m.env.Width,
 		ThinkingEffort:    thinkingEffort,
-		ShowThinking:      showThinking,
 		ReviewApprovals:   reviewApprovals,
 		ReviewEscalations: reviewEscalations,
 		AutopilotThinking: m.autopilotDeciding,

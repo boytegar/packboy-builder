@@ -23,16 +23,17 @@ Slash commands are typed directly in the TUI input box. They trigger local UI ac
 | `/mcp` | Manage MCP servers |
 | `/plugin` | Manage plugins |
 | `/reload-plugins` | Reload plugins and refresh plugin-backed components |
-| `/think` | Cycle thinking level (off / normal / high / ultra) |
+| `/think` | Cycle or set thinking effort (none / low / medium / high / xhigh) |
 | `/loop` | Schedule recurring or one-shot prompts and manage loop jobs |
 | `/search` | Select search engine for web search |
+| `/refine` | Review trajectory and apply evidence-backed updates to harness state (prompts, memories, skills, subagent specs) with rollback support |
 
 ## UI Interactions
 
 - Commands are matched against the registry as the user types; a suggestion dropdown appears.
 - Selector commands (`/models`, `/skills`, `/search`, etc.) open a scrollable picker overlay.
 - `/clear` immediately resets the visible conversation.
-- `/think` cycles through levels and updates the status bar indicator.
+- `/think` cycles through effort levels (none / low / medium / high / xhigh) and updates the effort badge above the input and the status bar indicator. Use `/think <level>` to set a specific level directly.
 - `/loop` has a dedicated reference page: see [Loop Scheduling Command](./loop.md).
 
 ## Automated Tests

@@ -36,11 +36,11 @@ func (c *Client) Name() string {
 }
 
 func (c *Client) ThinkingEfforts(model string) []string {
-	return []string{"none", "low", "medium", "high", "xhigh"}
+	return []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh}
 }
 
 func (c *Client) DefaultThinkingEffort(model string) string {
-	return "medium"
+	return llm.EffortMedium
 }
 
 // convertAssistant converts an assistant message for Moonshot.
@@ -58,7 +58,7 @@ func (c *Client) Stream(ctx context.Context, opts llm.CompletionOptions) <-chan 
 		Options:          opts,
 		ConvertAssistant: convertAssistant,
 		ConfigureParams: func(params *openai.ChatCompletionNewParams) {
-			if opts.ThinkingEffort != "" && opts.ThinkingEffort != "off" && opts.ThinkingEffort != "none" {
+			if llm.IsEffortActive(opts.ThinkingEffort) {
 				params.SetExtraFields(map[string]any{
 					"thinking": map[string]any{"type": "enabled"},
 				})

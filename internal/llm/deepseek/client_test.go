@@ -134,7 +134,7 @@ func TestDeepSeekV4StreamIncludesReasoningEffort(t *testing.T) {
 	ch := c.Stream(context.Background(), llm.CompletionOptions{
 		Model:          "deepseek-v4-flash",
 		Messages:       []core.Message{{Role: core.RoleUser, Content: "hi"}},
-		ThinkingEffort: "high",
+		ThinkingEffort: llm.EffortHigh,
 	})
 	for range ch {
 	}
@@ -145,8 +145,8 @@ func TestDeepSeekV4StreamIncludesReasoningEffort(t *testing.T) {
 	}
 
 	effort, _ := payload["reasoning_effort"].(string)
-	if effort != "high" {
-		t.Fatalf("expected reasoning_effort=high, got %q", effort)
+	if effort != llm.EffortHigh {
+		t.Fatalf("expected reasoning_effort=%s, got %q", llm.EffortHigh, effort)
 	}
 }
 
@@ -166,8 +166,8 @@ func TestDeepSeekThinkingEfforts(t *testing.T) {
 		model   string
 		efforts []string
 	}{
-		{"deepseek-v4-flash", []string{"off", "high", "max"}},
-		{"deepseek-v4-pro", []string{"off", "high", "max"}},
+		{"deepseek-v4-flash", []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh}},
+		{"deepseek-v4-pro", []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh}},
 	}
 	for _, tt := range tests {
 		got := c.ThinkingEfforts(tt.model)

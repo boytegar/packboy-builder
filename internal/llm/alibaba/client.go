@@ -49,11 +49,13 @@ func makeAssistantConverter(thinking bool) func(core.Message) openai.ChatComplet
 
 func thinkingBudget(effort string) int {
 	switch effort {
-	case "think":
+	case llm.EffortLow:
 		return 5000
-	case "think+":
+	case llm.EffortMedium:
+		return 16000
+	case llm.EffortHigh:
 		return 32000
-	case "ultrathink":
+	case llm.EffortXHigh:
 		return 128000
 	default:
 		return 0
@@ -64,14 +66,14 @@ func (c *Client) ThinkingEfforts(model string) []string {
 	if !isThinkingModel(model) {
 		return nil
 	}
-	return []string{"off", "think", "think+", "ultrathink"}
+	return []string{llm.EffortNone, llm.EffortLow, llm.EffortMedium, llm.EffortHigh, llm.EffortXHigh}
 }
 
 func (c *Client) DefaultThinkingEffort(model string) string {
 	if !isThinkingModel(model) {
 		return ""
 	}
-	return "off"
+	return llm.EffortNone
 }
 
 // Stream sends a completion request and returns a channel of streaming chunks.

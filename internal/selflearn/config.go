@@ -17,6 +17,9 @@ type Config struct {
 	// Skills bounds what a model-triggered review may do to the skill set.
 	Skills SkillPermissions
 
+	// HarnessEnabled enables the continual harness refinement loop.
+	HarnessEnabled bool
+
 	// Strategy is the user's learning-strategy override; non-empty replaces
 	// the built-in guidance for both arms in the reviewer prompt.
 	Strategy string
@@ -24,7 +27,9 @@ type Config struct {
 
 // Enabled reports whether any arm is on. When false the caller should not
 // even construct a Reviewer (zero overhead).
-func (c Config) Enabled() bool { return c.MemoryEnabled || c.Skills.Any() }
+func (c Config) Enabled() bool {
+	return c.MemoryEnabled || c.Skills.Any() || c.HarnessEnabled
+}
 
 // ResolveSettings validates the raw settings and returns the resolved
 // Config, applying §3.1 defaults for unset fields.

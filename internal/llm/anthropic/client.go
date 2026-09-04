@@ -467,11 +467,13 @@ func anthropicThinkingBudget(model, effort string) int {
 		return 0
 	}
 	switch effort {
-	case ThinkingNormal:
+	case llm.EffortLow:
 		return 5000
-	case ThinkingHigh:
+	case llm.EffortMedium:
+		return 16000
+	case llm.EffortHigh:
 		return 32000
-	case ThinkingUltra:
+	case llm.EffortXHigh:
 		return 128000
 	default:
 		return 0
