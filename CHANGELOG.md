@@ -3,6 +3,20 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [v1.23.8] - 2026-09-05
+
+### Added
+- Harness prompt refinement system with state machine
+- Harness tool for agent-driven prompt refinement
+- Refine input view for prompt refinement UI
+- Harness reviewer for self-learning review pipeline
+- Self-learning configuration option
+
+### Changed
+- LLM client timeout handling across all providers (Alibaba, Anthropic, BigModel, DeepSeek, Google, Moonshot, OpenAI)
+- Anthropic model catalog updates
+- Status bar and question conv UI improvements
+
 ## [v1.23.7] - 2026-08-26
 
 ### Added
