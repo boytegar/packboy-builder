@@ -79,6 +79,45 @@ func TestQuestionPromptRenderWrapsLongQuestionTextToMultipleLines(t *testing.T) 
 	}
 }
 
+func TestQuestionPromptRenderWrapsLongOptionTextToMultipleLines(t *testing.T) {
+	p := NewQuestionPrompt()
+	p.Show(&tool.QuestionRequest{
+		ID: "ask-1",
+		Questions: []tool.Question{{
+			Question: "Pick a release strategy",
+			Header:   "Choose",
+			Options: []tool.QuestionOption{{
+				Label:       "Use the staged rollout strategy for the upcoming major release",
+				Description: "This keeps the migration safe while giving operators time to monitor each stage",
+			}},
+		}},
+	}, 50)
+
+	plain := stripANSI(p.Render())
+	lines := strings.Split(plain, "\n")
+	var optionLines []string
+	for i, line := range lines {
+		if strings.Contains(line, "1. Use the staged") {
+			for j := i; j < len(lines); j++ {
+				if strings.TrimSpace(lines[j]) == "" {
+					break
+				}
+				optionLines = append(optionLines, lines[j])
+			}
+			break
+		}
+	}
+
+	if len(optionLines) <= 1 {
+		t.Fatalf("expected option text to wrap to multiple lines, got %d line(s):\n%s", len(optionLines), plain)
+	}
+	for i, line := range optionLines {
+		if visibleWidth := len(strings.TrimRight(line, " ")); visibleWidth > 48 {
+			t.Fatalf("wrapped option line %d exceeds content width (%d > 48): %q", i, visibleWidth, line)
+		}
+	}
+}
+
 func TestQuestionPromptRenderDoesNotDuplicateOtherOption(t *testing.T) {
 	p := NewQuestionPrompt()
 	p.Show(&tool.QuestionRequest{

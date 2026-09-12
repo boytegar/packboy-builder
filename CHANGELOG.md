@@ -3,7 +3,12 @@
 All notable changes to Packboy Builder are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [v1.23.9] - 2026-09-05
+## [v1.23.10] - 2026-09-12
+
+### Changed
+- Updated prompt and agent configuration behavior.
+- Refined conversation handling and skill registry coverage.
+
 
 ### Fixed
 - Read-only MCP tools (e.g. `mcp__server__read_file`) are now allowed in every permission mode (explore, default, acceptEdits, dontAsk, auto)

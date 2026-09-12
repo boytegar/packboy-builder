@@ -447,6 +447,9 @@ func (r *Registry) MatchForPromptWithTracker(text string, tr *Tracker) []string 
 
 	var matches []string
 	for _, sk := range r.skills {
+		if sk.Scope == ScopeBuiltin && sk.Name == "spec" {
+			continue
+		}
 		if !sk.IsActive() || (tr != nil && tr.IsLoaded(sk.FullName())) {
 			continue
 		}
