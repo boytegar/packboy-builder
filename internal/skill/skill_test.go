@@ -324,13 +324,26 @@ Review instructions.
 	userStore := &Store{path: filepath.Join(tmpDir, "u.json"), states: make(map[string]SkillState)}
 	projectStore := &Store{path: filepath.Join(tmpDir, "p.json"), states: make(map[string]SkillState)}
 	registry := &Registry{skills: skills, userStore: userStore, projectStore: projectStore, cwd: tmpDir}
+	registry.skills["spec"] = &Skill{
+		Name:        "spec",
+		Description: "generate a product specification",
+		FilePath:    skillPath,
+		SkillDir:    skillDir,
+		Scope:       ScopeBuiltin,
+		State:       StateActive,
+	}
+
+	matches := registry.MatchForPrompt("please create a specification for this feature")
+	if anyMatchFor(matches, "spec") {
+		t.Fatal("spec skill must require explicit /spec invocation")
+	}
 
 	// Skills load as StateActive by default, so MatchForPrompt considers them
 	// automatically without explicit activation.
 	// Match by skill name "commit" appearing in the prompt — but use a
 	// prompt that contains no words from the reviewer skill's description
 	// ("review", "code", "changes") to keep it unambiguous.
-	matches := registry.MatchForPrompt("please commit my latest work")
+	matches = registry.MatchForPrompt("please commit my latest work")
 	if !anyMatchFor(matches, "commit") {
 		t.Fatalf("name match: expected commit among %d matches", len(matches))
 	}

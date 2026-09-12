@@ -457,6 +457,11 @@ func (p *QuestionPrompt) Render() string {
 		selectedSet[idx] = true
 	}
 
+	optionTextWidth := textWidth - 3
+	if optionTextWidth < 20 {
+		optionTextWidth = 20
+	}
+
 	for i, opt := range currentQ.Options {
 		isHighlighted := i == curOption
 		isSelected := selectedSet[i]
@@ -474,10 +479,14 @@ func (p *QuestionPrompt) Render() string {
 		}
 
 		optBody := fmt.Sprintf("%s %d. %s", prefix, i+1, opt.Label)
+		var optionLine strings.Builder
 		if isHighlighted {
-			sb.WriteString(" " + kit.FocusBarStyle().Render(kit.FocusBar) + " " + getQuestionSelectedStyle().Render(optBody))
+			optionLine.WriteString(" ")
+			optionLine.WriteString(kit.FocusBarStyle().Render(kit.FocusBar))
+			optionLine.WriteString(" ")
+			optionLine.WriteString(getQuestionSelectedStyle().Render(optBody))
 		} else {
-			sb.WriteString(getQuestionUnselectedStyle().Render("   " + optBody))
+			optionLine.WriteString(getQuestionUnselectedStyle().Render("   " + optBody))
 		}
 
 		if i == customIdx {
@@ -485,12 +494,14 @@ func (p *QuestionPrompt) Render() string {
 			if desc == "" {
 				desc = "Type custom response"
 			}
-			sb.WriteString(" - ")
-			sb.WriteString(getQuestionDescStyle().Render(desc))
+			optionLine.WriteString(" - ")
+			optionLine.WriteString(getQuestionDescStyle().Render(desc))
 		} else if opt.Description != "" {
-			sb.WriteString(" - ")
-			sb.WriteString(getQuestionDescStyle().Render(opt.Description))
+			optionLine.WriteString(" - ")
+			optionLine.WriteString(getQuestionDescStyle().Render(opt.Description))
 		}
+
+		sb.WriteString(wrapQuestionText(optionLine.String(), optionTextWidth))
 		sb.WriteString("\n")
 	}
 
@@ -503,13 +514,18 @@ func (p *QuestionPrompt) Render() string {
 		}
 
 		otherBody := fmt.Sprintf("%s %d. Other", otherPrefix, customIdx+1)
+		var otherLine strings.Builder
 		if isOtherHighlighted {
-			sb.WriteString(" " + kit.FocusBarStyle().Render(kit.FocusBar) + " " + getQuestionSelectedStyle().Render(otherBody))
+			otherLine.WriteString(" ")
+			otherLine.WriteString(kit.FocusBarStyle().Render(kit.FocusBar))
+			otherLine.WriteString(" ")
+			otherLine.WriteString(getQuestionSelectedStyle().Render(otherBody))
 		} else {
-			sb.WriteString(getQuestionUnselectedStyle().Render("   " + otherBody))
+			otherLine.WriteString(getQuestionUnselectedStyle().Render("   " + otherBody))
 		}
-		sb.WriteString(" - ")
-		sb.WriteString(getQuestionDescStyle().Render("Type custom response"))
+		otherLine.WriteString(" - ")
+		otherLine.WriteString(getQuestionDescStyle().Render("Type custom response"))
+		sb.WriteString(wrapQuestionText(otherLine.String(), optionTextWidth))
 		sb.WriteString("\n")
 	}
 
